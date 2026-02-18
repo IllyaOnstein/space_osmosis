@@ -8,14 +8,22 @@ import { GestureHUD } from './components/GestureHUD';
 import './App.css';
 
 const UI = () => {
-  const { score, playerMass, gameOver, reset } = useGame();
+  const { score, playerMass, gameOver, reset, level, nextLevelScore, MAX_LEVEL, speedMultiplier } = useGame();
+
+  const LEVEL_COLORS = ['#00f3ff', '#00ff88', '#ffcc00', '#ff6600', '#ff00ff'];
 
   if (gameOver) {
     return (
       <div className="ui-overlay game-over">
         <h1>SYSTEM FAILURE</h1>
         <div className="cyber-hud" style={{ padding: '40px', textAlign: 'center' }}>
-          <p style={{ fontSize: '2rem', margin: '0 0 20px 0', color: 'var(--neon-cyan)' }}>
+          <p style={{ fontSize: '2rem', margin: '0 0 10px 0', color: LEVEL_COLORS[level - 1] }}>
+            LEVEL {level}
+          </p>
+          <p style={{ fontSize: '1.5rem', margin: '0 0 10px 0', color: 'var(--neon-cyan)' }}>
+            SCORE: {score}
+          </p>
+          <p style={{ fontSize: '1.2rem', margin: '0 0 20px 0', opacity: 0.7 }}>
             BIOMASS: {playerMass.toFixed(1)}
           </p>
           <button onClick={reset}>REBOOT SYSTEM</button>
@@ -24,14 +32,46 @@ const UI = () => {
     );
   }
 
+  // 升级进度百分比
+  const LEVEL_THRESHOLDS = [0, 10, 100, 1000, 10000];
+  const currentThreshold = LEVEL_THRESHOLDS[level - 1];
+  const progress = nextLevelScore
+    ? ((score - currentThreshold) / (nextLevelScore - currentThreshold)) * 100
+    : 100;
+
   return (
     <div className="ui-overlay hud">
       <div className="score-panel cyber-hud">
-        <h2>MASS: {playerMass.toFixed(1)}</h2>
-        <p>SCORE: {score}</p>
-        <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '5px' }}>
-          SECTOR: {Math.floor(score / 100)}A
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
+          <span style={{ fontSize: '1.4rem', color: LEVEL_COLORS[level - 1], fontWeight: 'bold' }}>
+            LV.{level}
+          </span>
+          <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>/ {MAX_LEVEL}</span>
         </div>
+        {nextLevelScore && (
+          <div style={{ marginBottom: '8px' }}>
+            <div style={{
+              width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)',
+              borderRadius: '3px', overflow: 'hidden'
+            }}>
+              <div style={{
+                width: `${progress}%`, height: '100%',
+                background: `linear-gradient(90deg, ${LEVEL_COLORS[level - 1]}, ${LEVEL_COLORS[level] || '#fff'})`,
+                borderRadius: '3px', transition: 'width 0.3s ease'
+              }} />
+            </div>
+            <div style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '2px' }}>
+              {score} / {nextLevelScore}
+            </div>
+          </div>
+        )}
+        {!nextLevelScore && (
+          <div style={{ fontSize: '0.8rem', color: '#ff00ff', marginBottom: '5px' }}>★ MAX LEVEL ★</div>
+        )}
+        <p>SCORE: {score}</p>
+        <p style={{ fontSize: '0.9rem', color: LEVEL_COLORS[level - 1] }}>
+          SPEED: {(speedMultiplier * 100).toFixed(0)}%
+        </p>
       </div>
       <div className="instructions cyber-hud">
         <p>WASD / PALM :: THRUST</p>

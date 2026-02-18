@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useMemo } from 'react';
 
 const GameContext = createContext();
 
@@ -6,13 +6,35 @@ export const useGame = () => useContext(GameContext);
 
 export const GameProvider = ({ children }) => {
   const [score, setScore] = useState(0);
-  const [playerMass, setPlayerMass] = useState(1); // Standard mass = 1
+  const [playerMass, setPlayerMass] = useState(1);
   const [gameOver, setGameOver] = useState(false);
+
+  // 升级系统：等级阈值 10^(n-1)
+  const MAX_LEVEL = 5;
+  const LEVEL_THRESHOLDS = [0, 10, 100, 1000, 10000]; // 1级=0分, 2级=10分, ..., 5级=10000分
+
+  const level = useMemo(() => {
+    for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
+      if (score >= LEVEL_THRESHOLDS[i]) return i + 1;
+    }
+    return 1;
+  }, [score]);
+
+  // 距离下一级还需要多少分
+  const nextLevelScore = level < MAX_LEVEL ? LEVEL_THRESHOLDS[level] : null;
 
   const grow = (amount) => {
     setPlayerMass((m) => m + amount);
     setScore((s) => s + Math.floor(amount * 10));
   };
+
+  const addScore = (points) => {
+    setScore((s) => s + points);
+  };
+
+  // 等级速度系数：1级=0.2x, 每级+0.2x
+  const SPEED_MULTIPLIERS = [0.2, 0.4, 0.6, 0.8, 1.0];
+  const speedMultiplier = SPEED_MULTIPLIERS[level - 1];
 
   const reset = () => {
     setScore(0);
@@ -31,7 +53,7 @@ export const GameProvider = ({ children }) => {
   const landmarksRef = React.useRef(null);
 
   return (
-    <GameContext.Provider value={{ score, playerMass, gameOver, setGameOver, grow, reset, controlsRef, landmarksRef }}>
+    <GameContext.Provider value={{ score, playerMass, gameOver, setGameOver, grow, addScore, reset, controlsRef, landmarksRef, level, nextLevelScore, MAX_LEVEL, speedMultiplier }}>
       {children}
     </GameContext.Provider>
   );

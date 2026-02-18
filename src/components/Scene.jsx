@@ -1,6 +1,6 @@
 import React from 'react';
 import { Physics } from '@react-three/rapier';
-import { Stars, OrbitControls, Sparkles } from '@react-three/drei';
+import { Stars, Sparkles } from '@react-three/drei';
 import { EffectComposer, Bloom, Noise, Vignette } from '@react-three/postprocessing';
 import { Player } from './Player';
 import { Enemies } from './Enemies';
@@ -74,7 +74,7 @@ export const Scene = () => {
                 <Enemies />
             </Physics>
 
-            <OrbitControls makeDefault rotateSpeed={2} minDistance={5} maxDistance={50} minPolarAngle={0} maxPolarAngle={Math.PI} />
+
 
             <EffectComposer>
                 <Bloom luminanceThreshold={0.2} luminanceSmoothing={0.9} height={300} intensity={1.5} />
