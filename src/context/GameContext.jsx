@@ -59,8 +59,11 @@ export const GameProvider = ({ children }) => {
   // Shared ref for raw landmarks (for HUD)
   const landmarksRef = React.useRef(null);
 
+  // 玩家实时位置（用于开放世界跟随）
+  const playerPosRef = React.useRef({ x: 0, y: 0, z: 0 });
+
   return (
-    <GameContext.Provider value={{ score, playerMass, gameOver, setGameOver, grow, addScore, forceLevelUp, reset, controlsRef, landmarksRef, level, nextLevelScore, MAX_LEVEL, speedMultiplier }}>
+    <GameContext.Provider value={{ score, playerMass, gameOver, setGameOver, grow, addScore, forceLevelUp, reset, controlsRef, landmarksRef, playerPosRef, level, nextLevelScore, MAX_LEVEL, speedMultiplier }}>
       {children}
     </GameContext.Provider>
   );

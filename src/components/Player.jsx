@@ -16,7 +16,7 @@ const MOUSE_SENSITIVITY = 0.003;
 export const Player = () => {
     const body = useRef();
     const { camera, gl } = useThree();
-    const { controlsRef, speedMultiplier, forceLevelUp, level } = useGame();
+    const { controlsRef, speedMultiplier, forceLevelUp, level, playerPosRef } = useGame();
     const [showLevelUpEffect, setShowLevelUpEffect] = React.useState(false);
 
     // 监听等级变化，触发特效
@@ -183,6 +183,9 @@ export const Player = () => {
         // 用球坐标计算摄像头相对玩家的偏移
         const pos = body.current.translation();
         const playerPos = new Vector3(pos.x, pos.y, pos.z);
+
+        // 更新共享玩家位置（供其他组件读取）
+        playerPosRef.current = { x: pos.x, y: pos.y, z: pos.z };
 
         // 球坐标 → 直角坐标
         // pitch > 0 = 抬头 → 摄像头在玩家下方 → offset.y 为负

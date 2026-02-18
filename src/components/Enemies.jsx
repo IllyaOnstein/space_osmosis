@@ -4,17 +4,33 @@ import { useFrame } from '@react-three/fiber';
 import { useGame } from '../context/GameContext';
 import * as THREE from 'three';
 
-const LARGE_COUNT = 50;
-const SMALL_COUNT = 225; // 增加50% (原150)
-const BOUNDS = 100;
-const RESPAWN_THRESHOLD = Math.floor(SMALL_COUNT / 2); // 剩余一半时开始补充
-const RESPAWN_INTERVAL = 500; // 每500ms补充一个
+const LARGE_COUNT = 150;    // 大天体数量
+const SMALL_COUNT = 600;    // 小天体数量
+const MIN_SPAWN_DIST = 60;  // 传送最近距离（不会出现在玩家眼前）
+const MAX_SPAWN_DIST = 150; // 传送最远距离
+const DESPAWN_DIST = 180;   // 超过此距离回收
+const RESPAWN_THRESHOLD = Math.floor(SMALL_COUNT / 2);
+const RESPAWN_INTERVAL = 200; // 更快补充
 
-// 生成随机位置
-const randomPos = () => [
-    (Math.random() - 0.5) * BOUNDS,
-    (Math.random() - 0.5) * BOUNDS,
-    (Math.random() - 0.5) * BOUNDS
+// 在玩家周围的球壳中生成随机位置（保证不会太近也不会太远）
+const randomPosInShell = (center = { x: 0, y: 0, z: 0 }, innerR = MIN_SPAWN_DIST, outerR = MAX_SPAWN_DIST) => {
+    // 随机方向（均匀球面分布）
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    // 随机距离（在内外半径之间）
+    const r = innerR + Math.random() * (outerR - innerR);
+    return [
+        center.x + r * Math.sin(phi) * Math.cos(theta),
+        center.y + r * Math.sin(phi) * Math.sin(theta),
+        center.z + r * Math.cos(phi)
+    ];
+};
+
+// 初始生成：围绕原点均匀分布
+const randomPosAround = (center = { x: 0, y: 0, z: 0 }, radius = MAX_SPAWN_DIST) => [
+    center.x + (Math.random() - 0.5) * radius * 2,
+    center.y + (Math.random() - 0.5) * radius * 2,
+    center.z + (Math.random() - 0.5) * radius * 2
 ];
 
 // 单个可收集小天体
@@ -49,26 +65,79 @@ const Collectible = ({ id, position, size, color, onCollect }) => {
     );
 };
 
-// 生成一个小天体数据
+// 大天体组件
+const LargeEnemy = React.forwardRef(({ data }, ref) => (
+    <RigidBody
+        ref={ref}
+        position={data.position}
+        colliders="ball"
+        linearDamping={0.1}
+        userData={{ type: 'enemy', mass: data.mass, id: data.key }}
+    >
+        <mesh>
+            <sphereGeometry args={[Math.pow(data.mass, 1 / 3) * 0.5, 16, 16]} />
+            <meshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={2} />
+        </mesh>
+    </RigidBody>
+));
+
 let nextId = SMALL_COUNT;
-const createSmallData = (id) => ({
+const createSmallData = (id, center) => ({
     id,
     key: `small-${id}-${Date.now()}`,
-    position: randomPos(),
+    position: randomPosInShell(center, MIN_SPAWN_DIST, MAX_SPAWN_DIST),
     size: 0.15 + Math.random() * 0.15,
     color: new THREE.Color().setHSL(0.45 + Math.random() * 0.15, 0.9, 0.6)
 });
 
 export const Enemies = () => {
-    const { addScore } = useGame();
+    const { addScore, playerPosRef } = useGame();
+    const largeRefs = useRef([]);
 
-    // 小天体列表（可变，支持增删）
+    // 大天体数据
+    const largeEnemies = useMemo(() => {
+        return new Array(LARGE_COUNT).fill(0).map((_, i) => ({
+            key: `large-${i}`,
+            position: randomPosAround({ x: 0, y: 0, z: 0 }, MAX_SPAWN_DIST),
+            mass: Math.random() * 10 + 3,
+            color: new THREE.Color().setHSL(Math.random(), 0.75, 0.5)
+        }));
+    }, []);
+
+    // 每帧检测大天体距离
+    useFrame(() => {
+        const pp = playerPosRef.current;
+        if (!pp) return;
+
+        largeRefs.current.forEach((ref) => {
+            if (!ref) return;
+            const t = ref.translation();
+            const dx = t.x - pp.x;
+            const dy = t.y - pp.y;
+            const dz = t.z - pp.z;
+            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+            if (dist > DESPAWN_DIST) {
+                // 传送到玩家远处的球壳中（不会紧贴玩家）
+                const newPos = randomPosInShell(pp, MIN_SPAWN_DIST, MAX_SPAWN_DIST);
+                ref.setTranslation({ x: newPos[0], y: newPos[1], z: newPos[2] }, true);
+                ref.setLinvel({ x: 0, y: 0, z: 0 }, true);
+            }
+        });
+    });
+
+    // 小天体列表
     const [smallList, setSmallList] = useState(() =>
-        new Array(SMALL_COUNT).fill(0).map((_, i) => createSmallData(i))
+        new Array(SMALL_COUNT).fill(0).map((_, i) => ({
+            id: i,
+            key: `small-${i}-init`,
+            position: randomPosAround({ x: 0, y: 0, z: 0 }, MAX_SPAWN_DIST),
+            size: 0.15 + Math.random() * 0.15,
+            color: new THREE.Color().setHSL(0.45 + Math.random() * 0.15, 0.9, 0.6)
+        }))
     );
     const [collected, setCollected] = useState(new Set());
 
-    // 收集小天体
     const handleCollect = useCallback((id) => {
         setCollected(prev => {
             if (prev.has(id)) return prev;
@@ -79,12 +148,12 @@ export const Enemies = () => {
         });
     }, [addScore]);
 
-    // 补充机制：当剩余数量 < 一半时，逐渐补充
+    // 补充机制
     useEffect(() => {
         const remaining = smallList.length - collected.size;
         if (remaining >= RESPAWN_THRESHOLD) return;
 
-        const toSpawn = SMALL_COUNT - remaining; // 需要补充的数量
+        const toSpawn = SMALL_COUNT - remaining;
         let spawned = 0;
 
         const timer = setInterval(() => {
@@ -93,43 +162,25 @@ export const Enemies = () => {
                 return;
             }
             const newId = nextId++;
-            setSmallList(prev => [...prev, createSmallData(newId)]);
+            setSmallList(prev => [...prev, createSmallData(newId, playerPosRef.current)]);
             spawned++;
         }, RESPAWN_INTERVAL);
 
         return () => clearInterval(timer);
     }, [collected.size, smallList.length]);
 
-    // 大天体（五颜六色）
-    const largeEnemies = useMemo(() => {
-        return new Array(LARGE_COUNT).fill(0).map((_, i) => ({
-            key: `large-${i}`,
-            position: randomPos(),
-            mass: Math.random() * 10 + 3,
-            // 五颜六色：随机色相，高饱和度
-            color: new THREE.Color().setHSL(Math.random(), 0.75, 0.5)
-        }));
-    }, []);
-
     return (
         <>
             {/* 大天体（五颜六色，危险） */}
-            {largeEnemies.map((data) => (
-                <RigidBody
+            {largeEnemies.map((data, i) => (
+                <LargeEnemy
                     key={data.key}
-                    position={data.position}
-                    colliders="ball"
-                    linearDamping={0.1}
-                    userData={{ type: 'enemy', mass: data.mass, id: data.key }}
-                >
-                    <mesh>
-                        <sphereGeometry args={[Math.pow(data.mass, 1 / 3) * 0.5, 16, 16]} />
-                        <meshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={2} />
-                    </mesh>
-                </RigidBody>
+                    data={data}
+                    ref={(el) => { largeRefs.current[i] = el; }}
+                />
             ))}
 
-            {/* 小天体（可收集） */}
+            {/* 1分得分小球（可收集） */}
             {smallList.map((data) => (
                 !collected.has(data.id) && (
                     <Collectible
