@@ -3,7 +3,7 @@ import { RigidBody } from '@react-three/rapier';
 import { useFrame } from '@react-three/fiber';
 import { useGame } from '../context/GameContext';
 
-const COUNT = 50;
+const COUNT = 25; // 原50减半
 const MIN_SPAWN_DIST = 80;  // 传送最近距离
 const MAX_SPAWN_DIST = 180; // 传送最远距离
 const DESPAWN_DIST = 220;   // 超过此距离回收
@@ -33,7 +33,7 @@ export const CrystalShards = () => {
                 (Math.random() - 0.5) * 100
             ],
             rotation: [Math.random() * Math.PI, Math.random() * Math.PI, 0],
-            scale: [2, 2, 2],
+            scale: [1, 1, 1], // 原[2,2,2]减半
         }));
     }, []);
 
