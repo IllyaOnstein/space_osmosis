@@ -248,17 +248,184 @@ const Level5Visuals = () => {
     );
 };
 
+// --- 冲刺拖尾粒子 ---
+const DashTrail = () => {
+    const { dashStateRef } = useGame();
+    const [isDashing, setIsDashing] = React.useState(false);
+
+    useFrame(() => {
+        const active = dashStateRef?.current?.active || false;
+        if (active !== isDashing) setIsDashing(active);
+    });
+
+    if (!isDashing) return null;
+
+    return (
+        <group>
+            <Sparkles
+                count={40}
+                scale={4}
+                size={6}
+                speed={2}
+                opacity={0.8}
+                color="#00e5ff"
+                noise={1}
+            />
+            <Sparkles
+                count={20}
+                scale={3}
+                size={3}
+                speed={3}
+                opacity={0.5}
+                color="#ffffff"
+                noise={0.8}
+            />
+            <pointLight color="#00e5ff" intensity={8} distance={10} decay={2} />
+        </group>
+    );
+};
+
+// --- 全息护盾 ---
+const HolographicShield = () => {
+    const { shieldStateRef } = useGame();
+    const meshRef = useRef();
+    const [isActive, setIsActive] = React.useState(false);
+
+    useFrame((state) => {
+        const active = shieldStateRef?.current?.active || false;
+        if (active !== isActive) setIsActive(active);
+        if (meshRef.current && active) {
+            meshRef.current.rotation.y += 0.02;
+            meshRef.current.rotation.x += 0.008;
+            const t = state.clock.getElapsedTime();
+            const pulse = 0.4 + Math.sin(t * 4) * 0.15;
+            meshRef.current.material.opacity = pulse;
+        }
+    });
+
+    if (!isActive) return null;
+
+    return (
+        <group>
+            <mesh ref={meshRef}>
+                <icosahedronGeometry args={[1.2, 1]} />
+                <meshBasicMaterial
+                    color="#00f3ff"
+                    wireframe
+                    transparent
+                    opacity={0.4}
+                    toneMapped={false}
+                />
+            </mesh>
+            {/* 内层发光 */}
+            <mesh>
+                <sphereGeometry args={[0.9, 16, 16]} />
+                <meshBasicMaterial
+                    color="#00f3ff"
+                    transparent
+                    opacity={0.08}
+                    side={THREE.BackSide}
+                    toneMapped={false}
+                />
+            </mesh>
+            <pointLight color="#00f3ff" intensity={3} distance={8} decay={2} />
+        </group>
+    );
+};
+
+// --- 护盾碎裂特效 ---
+const ShieldShatter = () => {
+    const [shattering, setShattering] = React.useState(false);
+    const groupRef = useRef();
+    const elapsed = useRef(0);
+    const shardsRef = useRef([]);
+    const SHARD_COUNT = 16;
+    const DURATION = 0.8;
+
+    useFrame((_, delta) => {
+        // 检测碎裂触发
+        if (window.shieldBroken && !shattering) {
+            window.shieldBroken = false;
+            setShattering(true);
+            elapsed.current = 0;
+            // 生成碎片方向
+            shardsRef.current = new Array(SHARD_COUNT).fill(0).map(() => ({
+                dir: new THREE.Vector3(
+                    (Math.random() - 0.5) * 2,
+                    (Math.random() - 0.5) * 2,
+                    (Math.random() - 0.5) * 2
+                ).normalize(),
+                speed: 2 + Math.random() * 4,
+                rotAxis: new THREE.Vector3(Math.random(), Math.random(), Math.random()).normalize(),
+            }));
+        }
+
+        if (!shattering) return;
+
+        elapsed.current += delta;
+        if (elapsed.current >= DURATION) {
+            setShattering(false);
+            return;
+        }
+
+        const t = elapsed.current / DURATION;
+        const children = groupRef.current?.children;
+        if (!children) return;
+
+        for (let i = 0; i < children.length; i++) {
+            const shard = shardsRef.current[i];
+            if (!shard || !children[i]) continue;
+            const dist = shard.speed * elapsed.current;
+            children[i].position.copy(shard.dir.clone().multiplyScalar(dist));
+            children[i].rotation.x += delta * 5;
+            children[i].rotation.y += delta * 3;
+            children[i].material.opacity = (1 - t) * 0.8;
+            const scale = 0.15 * (1 - t * 0.5);
+            children[i].scale.set(scale, scale, scale);
+        }
+    });
+
+    if (!shattering) return null;
+
+    return (
+        <group ref={groupRef}>
+            {new Array(SHARD_COUNT).fill(0).map((_, i) => (
+                <mesh key={i}>
+                    <tetrahedronGeometry args={[1, 0]} />
+                    <meshBasicMaterial
+                        color="#00f3ff"
+                        transparent
+                        opacity={0.8}
+                        toneMapped={false}
+                    />
+                </mesh>
+            ))}
+        </group>
+    );
+};
+
 export const PlayerVisuals = () => {
     const { level } = useGame();
 
-    switch (level) {
-        case 1: return <Level1Visuals />;
-        case 2: return <Level2Visuals />;
-        case 3: return <Level3Visuals />;
-        case 4: return <Level4Visuals />;
-        case 5: return <Level5Visuals />;
-        default: return <Level2Visuals />;
-    }
+    const LevelComponent = () => {
+        switch (level) {
+            case 1: return <Level1Visuals />;
+            case 2: return <Level2Visuals />;
+            case 3: return <Level3Visuals />;
+            case 4: return <Level4Visuals />;
+            case 5: return <Level5Visuals />;
+            default: return <Level2Visuals />;
+        }
+    };
+
+    return (
+        <group>
+            <LevelComponent />
+            <DashTrail />
+            <HolographicShield />
+            <ShieldShatter />
+        </group>
+    );
 };
 
 export const LevelUpFlash = () => {

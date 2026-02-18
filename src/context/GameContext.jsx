@@ -62,8 +62,23 @@ export const GameProvider = ({ children }) => {
   // 玩家实时位置（用于开放世界跟随）
   const playerPosRef = React.useRef({ x: 0, y: 0, z: 0 });
 
+  // 水晶碎片位置（用于雷达显示）
+  const crystalPosRef = React.useRef([]);
+
+  // 摄像头水平旋转角（用于雷达同步）
+  const cameraYawRef = React.useRef(Math.PI);
+
+  // 冲刺技能状态（用于UI显示）
+  const dashStateRef = React.useRef({ active: false, cooldownLeft: 0, ready: true });
+
+  // 护盾技能状态
+  const shieldStateRef = React.useRef({ active: false, cooldownLeft: 0, ready: true });
+
+  // 激光技能状态
+  const laserStateRef = React.useRef({ active: false, cooldownLeft: 0, ready: true });
+
   return (
-    <GameContext.Provider value={{ score, playerMass, gameOver, setGameOver, grow, addScore, forceLevelUp, reset, controlsRef, landmarksRef, playerPosRef, level, nextLevelScore, MAX_LEVEL, speedMultiplier }}>
+    <GameContext.Provider value={{ score, playerMass, gameOver, setGameOver, grow, addScore, forceLevelUp, reset, controlsRef, landmarksRef, playerPosRef, crystalPosRef, cameraYawRef, dashStateRef, shieldStateRef, laserStateRef, level, nextLevelScore, MAX_LEVEL, speedMultiplier }}>
       {children}
     </GameContext.Provider>
   );

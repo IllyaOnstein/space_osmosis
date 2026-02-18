@@ -3,7 +3,7 @@ import { RigidBody } from '@react-three/rapier';
 import { useFrame } from '@react-three/fiber';
 import { useGame } from '../context/GameContext';
 
-const COUNT = 25; // 原50减半
+const COUNT = 6; // 原25的四分之一
 const MIN_SPAWN_DIST = 80;  // 传送最近距离
 const MAX_SPAWN_DIST = 180; // 传送最远距离
 const DESPAWN_DIST = 220;   // 超过此距离回收
@@ -21,8 +21,9 @@ const randomPosInShell = (center = { x: 0, y: 0, z: 0 }, innerR = MIN_SPAWN_DIST
 };
 
 export const CrystalShards = () => {
-    const { addScore, playerPosRef } = useGame();
+    const { addScore, playerPosRef, crystalPosRef } = useGame();
     const shardRefs = useRef([]);
+    const lastCrystalLaserRef = useRef(0);
 
     const shards = useMemo(() => {
         return new Array(COUNT).fill(0).map((_, i) => ({
@@ -55,14 +56,62 @@ export const CrystalShards = () => {
                 ref.setTranslation({ x: newPos[0], y: newPos[1], z: newPos[2] }, true);
             }
         });
+
+        // 更新水晶位置供雷达使用
+        const positions = [];
+        shardRefs.current.forEach((ref) => {
+            if (!ref) return;
+            const t = ref.translation();
+            positions.push({ x: t.x, y: t.y, z: t.z });
+        });
+        crystalPosRef.current = positions;
+
+        // --- 激光击中检测 ---
+        if (window.laserHit && window.laserHit.time !== lastCrystalLaserRef.current) {
+            const hitPt = window.laserHit.point;
+            lastCrystalLaserRef.current = window.laserHit.time;
+
+            let closestDist = 3;
+            let closestRef = null;
+            shardRefs.current.forEach((ref) => {
+                if (!ref) return;
+                const t = ref.translation();
+                const dx = t.x - hitPt.x;
+                const dy = t.y - hitPt.y;
+                const dz = t.z - hitPt.z;
+                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestRef = ref;
+                }
+            });
+
+            if (closestRef) {
+                const newPos = randomPosInShell(pp);
+                closestRef.setTranslation({ x: newPos[0], y: newPos[1], z: newPos[2] }, true);
+            }
+        }
     });
 
     const handleCollision = useCallback((e) => {
         const other = e.other?.rigidBodyObject;
         if (other?.userData?.type === 'player') {
-            addScore(-0.1);
+            if (window.shieldActive) {
+                // 护盾吸收碰撞：水晶碎片消失（传送走），护盾碎裂
+                window.shieldActive = false;
+                window.shieldBroken = true; // 触发碎裂特效
+                // 传送碰到的水晶到远处
+                const self = e.target;
+                if (self) {
+                    const pp = playerPosRef.current;
+                    const newPos = randomPosInShell(pp);
+                    self.setTranslation({ x: newPos[0], y: newPos[1], z: newPos[2] }, true);
+                }
+            } else {
+                addScore(-0.1);
+            }
         }
-    }, [addScore]);
+    }, [addScore, playerPosRef]);
 
     return (
         <>

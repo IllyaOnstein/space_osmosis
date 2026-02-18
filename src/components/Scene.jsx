@@ -6,6 +6,7 @@ import { EffectComposer, Bloom, Noise, Vignette } from '@react-three/postprocess
 import { Player } from './Player';
 import { Enemies } from './Enemies';
 import { CrystalShards } from './CrystalShards';
+import { LaserBeam } from './LaserBeam';
 import * as THREE from 'three';
 
 // --- 程序化星云 Shader ---
@@ -459,6 +460,8 @@ export const Scene = () => {
         <Enemies />
         <CrystalShards />
       </Physics>
+
+      <LaserBeam />
 
       <EffectComposer>
         <Bloom luminanceThreshold={0.2} luminanceSmoothing={0.9} height={300} intensity={1.5} />

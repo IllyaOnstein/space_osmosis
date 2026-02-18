@@ -78,13 +78,9 @@ export const GestureHUD = () => {
 
     return (
         <div className="gesture-hud-container cyber-hud" style={{
-            position: 'absolute',
-            bottom: '20px',
-            left: '50%',
-            transform: 'translateX(-50%)',
+            position: 'relative',
             width: '320px',
             height: '240px',
-            zIndex: 99,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',

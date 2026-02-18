@@ -73,6 +73,27 @@ const LargeEnemy = React.forwardRef(({ data }, ref) => (
         colliders="ball"
         linearDamping={0.1}
         userData={{ type: 'enemy', mass: data.mass, id: data.key }}
+        onCollisionEnter={(e) => {
+            const other = e.other?.rigidBodyObject;
+            if (other?.userData?.type === 'player' && window.shieldActive) {
+                // 护盾吸收：大天体传送走，护盾碎裂
+                window.shieldActive = false;
+                window.shieldBroken = true;
+                if (ref?.current) {
+                    const pos = ref.current.translation();
+                    // 传送到远处随机位置
+                    const angle = Math.random() * Math.PI * 2;
+                    const phi = Math.acos(2 * Math.random() - 1);
+                    const dist = 150 + Math.random() * 50;
+                    ref.current.setTranslation({
+                        x: pos.x + Math.sin(phi) * Math.cos(angle) * dist,
+                        y: pos.y + Math.cos(phi) * dist * 0.5,
+                        z: pos.z + Math.sin(phi) * Math.sin(angle) * dist,
+                    }, true);
+                    ref.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+                }
+            }
+        }}
     >
         <mesh>
             <sphereGeometry args={[Math.pow(data.mass, 1 / 3) * 0.75, 16, 16]} />
@@ -154,6 +175,7 @@ export const Enemies = () => {
     }, []);
 
     // 每帧检测大天体距离
+    const lastLaserHitRef = useRef(0);
     useFrame(() => {
         const pp = playerPosRef.current;
         if (!pp) return;
@@ -173,6 +195,54 @@ export const Enemies = () => {
                 ref.setLinvel({ x: 0, y: 0, z: 0 }, true);
             }
         });
+
+        // --- 激光击中检测 ---
+        if (window.laserHit && window.laserHit.time !== lastLaserHitRef.current) {
+            const hitPt = window.laserHit.point;
+            lastLaserHitRef.current = window.laserHit.time;
+
+            // 检查大天体
+            let closestDist = 5; // 命中半径阈值
+            let closestRef = null;
+            largeRefs.current.forEach((ref) => {
+                if (!ref) return;
+                const t = ref.translation();
+                const dx = t.x - hitPt.x;
+                const dy = t.y - hitPt.y;
+                const dz = t.z - hitPt.z;
+                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestRef = ref;
+                }
+            });
+
+            if (closestRef) {
+                // 传送走（消失）
+                const newPos = randomPosInShell(pp, MIN_SPAWN_DIST + 50, MAX_SPAWN_DIST + 50);
+                closestRef.setTranslation({ x: newPos[0], y: newPos[1], z: newPos[2] }, true);
+                closestRef.setLinvel({ x: 0, y: 0, z: 0 }, true);
+            }
+
+            // 检查得分小球
+            let closestOrbDist = 3;
+            let closestOrbId = null;
+            smallList.forEach((orb) => {
+                if (collected.has(orb.id)) return;
+                const dx = orb.position[0] - hitPt.x;
+                const dy = orb.position[1] - hitPt.y;
+                const dz = orb.position[2] - hitPt.z;
+                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if (dist < closestOrbDist) {
+                    closestOrbDist = dist;
+                    closestOrbId = orb.id;
+                }
+            });
+
+            if (closestOrbId !== null) {
+                handleCollect(closestOrbId);
+            }
+        }
     });
 
     // 小天体列表

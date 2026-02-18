@@ -16,7 +16,7 @@ const MOUSE_SENSITIVITY = 0.003;
 export const Player = () => {
     const body = useRef();
     const { camera, gl } = useThree();
-    const { controlsRef, speedMultiplier, forceLevelUp, level, playerPosRef } = useGame();
+    const { controlsRef, speedMultiplier, forceLevelUp, level, playerPosRef, cameraYawRef, dashStateRef, shieldStateRef, laserStateRef } = useGame();
     const [showLevelUpEffect, setShowLevelUpEffect] = React.useState(false);
 
     // 监听等级变化，触发特效
@@ -50,6 +50,96 @@ export const Player = () => {
 
     // 键盘上下键状态（Space=上, Shift=下）
     const keysRef = useRef({ up: false, down: false });
+
+    // --- 冲刺系统 ---
+    const DASH_DURATION = 1.0;   // 冲刺持续1秒
+    const DASH_COOLDOWN = 5.0;   // 冷却5秒
+    const DASH_SPEED_MULT = 5.0; // 5倍速度
+    const dashRef = useRef({
+        active: false,
+        timer: 0,
+        cooldownTimer: 0,
+        direction: new Vector3(),
+    });
+
+    // Z 键监听
+    useEffect(() => {
+        const onDashKey = (e) => {
+            if ((e.key === 'z' || e.key === 'Z') && !e.altKey && !e.ctrlKey) {
+                if (level >= 2 && !dashRef.current.active && dashRef.current.cooldownTimer <= 0) {
+                    // 启动冲刺
+                    const yaw = camYaw.current;
+                    const pitch = camPitch.current;
+                    dashRef.current.active = true;
+                    dashRef.current.timer = DASH_DURATION;
+                    dashRef.current.cooldownTimer = DASH_COOLDOWN;
+                    dashRef.current.direction.set(
+                        -Math.sin(yaw) * Math.cos(pitch),
+                        Math.sin(pitch),
+                        -Math.cos(yaw) * Math.cos(pitch)
+                    ).normalize();
+                }
+            }
+        };
+        window.addEventListener('keydown', onDashKey);
+        return () => window.removeEventListener('keydown', onDashKey);
+    }, [level]);
+
+    // --- 护盾系统 ---
+    const SHIELD_COOLDOWN = 10.0;
+    const shieldRef = useRef({
+        active: false,
+        cooldownTimer: 0,
+    });
+
+    // X 键监听
+    useEffect(() => {
+        const onShieldKey = (e) => {
+            if ((e.key === 'x' || e.key === 'X') && !e.altKey && !e.ctrlKey) {
+                if (level >= 3 && !shieldRef.current.active && shieldRef.current.cooldownTimer <= 0) {
+                    shieldRef.current.active = true;
+                    shieldRef.current.cooldownTimer = SHIELD_COOLDOWN;
+                    window.shieldActive = true;
+                }
+            }
+        };
+        window.addEventListener('keydown', onShieldKey);
+        return () => window.removeEventListener('keydown', onShieldKey);
+    }, [level]);
+
+    // --- 激光系统 ---
+    const LASER_COOLDOWN = 2.0;
+    const laserRef = useRef({
+        cooldownTimer: 0,
+    });
+
+    // C 键监听
+    useEffect(() => {
+        const onLaserKey = (e) => {
+            if ((e.key === 'c' || e.key === 'C') && !e.altKey && !e.ctrlKey) {
+                if (level >= 4 && laserRef.current.cooldownTimer <= 0) {
+                    laserRef.current.cooldownTimer = LASER_COOLDOWN;
+                    const yaw = camYaw.current;
+                    const pitch = camPitch.current;
+                    const dir = {
+                        x: -Math.sin(yaw) * Math.cos(pitch),
+                        y: Math.sin(pitch),
+                        z: -Math.cos(yaw) * Math.cos(pitch),
+                    };
+                    const pos = body.current?.translation();
+                    if (pos) {
+                        window.laserShot = {
+                            origin: { x: pos.x, y: pos.y, z: pos.z },
+                            direction: dir,
+                            time: Date.now(),
+                        };
+                    }
+                }
+            }
+        };
+        window.addEventListener('keydown', onLaserKey);
+        return () => window.removeEventListener('keydown', onLaserKey);
+    }, [level]);
 
     // Pointer Lock 鼠标控制
     useEffect(() => {
@@ -168,15 +258,71 @@ export const Player = () => {
             );
         }
 
-        // 限制最大速度
-        const vel = body.current.linvel();
-        const speed = Math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2);
-        if (speed > MAX_SPEED) {
-            const scale = MAX_SPEED / speed;
-            body.current.setLinvel(
-                { x: vel.x * scale, y: vel.y * scale, z: vel.z * scale },
-                true
-            );
+        // --- 冲刺逻辑 ---
+        const dash = dashRef.current;
+        if (dash.cooldownTimer > 0) {
+            dash.cooldownTimer -= 0.016;
+        }
+        if (dash.active) {
+            dash.timer -= 0.016;
+            if (dash.timer <= 0) {
+                dash.active = false;
+                dash.timer = 0;
+            } else {
+                // 冲刺中：强制设置速度为 5 倍最大速度沿冲刺方向
+                const dashSpeed = MAX_SPEED * DASH_SPEED_MULT;
+                body.current.setLinvel({
+                    x: dash.direction.x * dashSpeed,
+                    y: dash.direction.y * dashSpeed,
+                    z: dash.direction.z * dashSpeed,
+                }, true);
+            }
+        }
+        // 更新冲刺状态供UI读取
+        dashStateRef.current = {
+            active: dash.active,
+            cooldownLeft: Math.max(dash.cooldownTimer, 0),
+            ready: !dash.active && dash.cooldownTimer <= 0 && level >= 2,
+        };
+
+        // --- 护盾逻辑 ---
+        const shield = shieldRef.current;
+        if (shield.cooldownTimer > 0 && !shield.active) {
+            shield.cooldownTimer -= 0.016;
+        }
+        // 检查护盾是否被碰撞打破（由 window.shieldActive 标记）
+        if (shield.active && !window.shieldActive) {
+            shield.active = false;
+        }
+        window.shieldActive = shield.active;
+        shieldStateRef.current = {
+            active: shield.active,
+            cooldownLeft: Math.max(shield.cooldownTimer, 0),
+            ready: !shield.active && shield.cooldownTimer <= 0 && level >= 3,
+        };
+
+        // --- 激光冷却 ---
+        const laser = laserRef.current;
+        if (laser.cooldownTimer > 0) {
+            laser.cooldownTimer -= 0.016;
+        }
+        laserStateRef.current = {
+            active: laser.cooldownTimer > LASER_COOLDOWN - 0.3, // 前0.3秒显示活跃
+            cooldownLeft: Math.max(laser.cooldownTimer, 0),
+            ready: laser.cooldownTimer <= 0 && level >= 4,
+        };
+
+        // 限制最大速度 (冲刺时不限制)
+        if (!dash.active) {
+            const vel = body.current.linvel();
+            const speed = Math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2);
+            if (speed > MAX_SPEED) {
+                const scale = MAX_SPEED / speed;
+                body.current.setLinvel(
+                    { x: vel.x * scale, y: vel.y * scale, z: vel.z * scale },
+                    true
+                );
+            }
         }
 
         // --- Minecraft 风格第三人称摄像头 ---
@@ -186,6 +332,7 @@ export const Player = () => {
 
         // 更新共享玩家位置（供其他组件读取）
         playerPosRef.current = { x: pos.x, y: pos.y, z: pos.z };
+        cameraYawRef.current = camYaw.current;
 
         // 球坐标 → 直角坐标
         // pitch > 0 = 抬头 → 摄像头在玩家下方 → offset.y 为负

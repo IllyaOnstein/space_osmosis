@@ -5,6 +5,8 @@ import { GameProvider, useGame } from './context/GameContext';
 import { Scene } from './components/Scene';
 import { MediaPipeController } from './components/MediaPipeController';
 import { GestureHUD } from './components/GestureHUD';
+import { CrystalRadar } from './components/CrystalRadar';
+import { SkillPanel } from './components/SkillPanel';
 import './App.css';
 
 const UI = () => {
@@ -105,7 +107,20 @@ function App() {
           </Canvas>
           <UI />
           <MediaPipeController />
-          <GestureHUD />
+          <div style={{
+            position: 'absolute',
+            bottom: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            alignItems: 'flex-end',
+            gap: '20px',
+            zIndex: 99,
+          }}>
+            <CrystalRadar />
+            <GestureHUD />
+            <SkillPanel />
+          </div>
           <Loader />
         </KeyboardControls>
       </GameProvider>
