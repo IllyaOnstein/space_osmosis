@@ -5,7 +5,7 @@ import { useGame } from '../context/GameContext';
 import * as THREE from 'three';
 
 const LARGE_COUNT = 50;
-const SMALL_COUNT = 150;
+const SMALL_COUNT = 225; // 增加50% (原150)
 const BOUNDS = 100;
 const RESPAWN_THRESHOLD = Math.floor(SMALL_COUNT / 2); // 剩余一半时开始补充
 const RESPAWN_INTERVAL = 500; // 每500ms补充一个

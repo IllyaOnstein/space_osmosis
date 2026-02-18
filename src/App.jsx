@@ -21,7 +21,7 @@ const UI = () => {
             LEVEL {level}
           </p>
           <p style={{ fontSize: '1.5rem', margin: '0 0 10px 0', color: 'var(--neon-cyan)' }}>
-            SCORE: {score}
+            SCORE: {score.toFixed(1)}
           </p>
           <p style={{ fontSize: '1.2rem', margin: '0 0 20px 0', opacity: 0.7 }}>
             BIOMASS: {playerMass.toFixed(1)}
@@ -33,7 +33,7 @@ const UI = () => {
   }
 
   // 升级进度百分比
-  const LEVEL_THRESHOLDS = [0, 10, 100, 1000, 10000];
+  const LEVEL_THRESHOLDS = [0, 5, 15, 30, 50];
   const currentThreshold = LEVEL_THRESHOLDS[level - 1];
   const progress = nextLevelScore
     ? ((score - currentThreshold) / (nextLevelScore - currentThreshold)) * 100
@@ -61,14 +61,14 @@ const UI = () => {
               }} />
             </div>
             <div style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '2px' }}>
-              {score} / {nextLevelScore}
+              {score.toFixed(1)} / {nextLevelScore}
             </div>
           </div>
         )}
         {!nextLevelScore && (
           <div style={{ fontSize: '0.8rem', color: '#ff00ff', marginBottom: '5px' }}>★ MAX LEVEL ★</div>
         )}
-        <p>SCORE: {score}</p>
+        <p>SCORE: {score.toFixed(1)}</p>
         <p style={{ fontSize: '0.9rem', color: LEVEL_COLORS[level - 1] }}>
           SPEED: {(speedMultiplier * 100).toFixed(0)}%
         </p>

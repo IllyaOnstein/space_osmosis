@@ -2,9 +2,9 @@ import React, { useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useKeyboardControls } from "@react-three/drei";
 import { RigidBody } from "@react-three/rapier";
-import { Trail } from "@react-three/drei";
-import { Vector3, Spherical, MathUtils } from "three";
+import { Vector3, MathUtils } from "three";
 import { useGame } from "../context/GameContext";
+import { PlayerVisuals, LevelUpFlash } from "./PlayerVisuals";
 
 const BASE_THRUST = 8;
 const BRAKE_FACTOR = 0.85;
@@ -16,7 +16,29 @@ const MOUSE_SENSITIVITY = 0.003;
 export const Player = () => {
     const body = useRef();
     const { camera, gl } = useThree();
-    const { controlsRef, speedMultiplier } = useGame();
+    const { controlsRef, speedMultiplier, forceLevelUp, level } = useGame();
+    const [showLevelUpEffect, setShowLevelUpEffect] = React.useState(false);
+
+    // 监听等级变化，触发特效
+    const prevLevel = useRef(level);
+    useEffect(() => {
+        if (level > prevLevel.current) {
+            setShowLevelUpEffect(true);
+            setTimeout(() => setShowLevelUpEffect(false), 1000); // 1秒持续时间
+        }
+        prevLevel.current = level;
+    }, [level]);
+
+    // Alt+L 升级快捷键
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (e.altKey && (e.key === 'l' || e.key === 'L')) {
+                forceLevelUp();
+            }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [forceLevelUp]);
 
     // 根据等级调整速度
     const THRUST = BASE_THRUST * speedMultiplier;
@@ -182,16 +204,8 @@ export const Player = () => {
 
     return (
         <RigidBody ref={body} colliders="ball" position={[0, 0, 0]} gravityScale={0} linearDamping={0.5} userData={{ type: 'player' }}>
-            <Trail width={6} length={8} color={"#00f3ff"} attenuation={(t) => t * t}>
-                <mesh castShadow receiveShadow>
-                    <sphereGeometry args={[0.5, 32, 32]} />
-                    <meshStandardMaterial
-                        color="#00f3ff"
-                        emissive="#00f3ff"
-                        emissiveIntensity={3}
-                    />
-                </mesh>
-            </Trail>
+            <PlayerVisuals />
+            {showLevelUpEffect && <LevelUpFlash />}
         </RigidBody>
     );
 };

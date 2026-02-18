@@ -4,6 +4,7 @@ import { Stars, Sparkles } from '@react-three/drei';
 import { EffectComposer, Bloom, Noise, Vignette } from '@react-three/postprocessing';
 import { Player } from './Player';
 import { Enemies } from './Enemies';
+import { CrystalShards } from './CrystalShards';
 
 export const Scene = () => {
     return (
@@ -45,33 +46,10 @@ export const Scene = () => {
                 opacity={0.4}
             />
 
-            {/* --- CRYSTAL SHARDS (Debug/Simple Implementation) --- */}
-            {[...Array(100)].map((_, i) => (
-                <mesh
-                    key={`shard-${i}`}
-                    position={[
-                        (Math.random() - 0.5) * 200, // Spread wide X
-                        (Math.random() - 0.5) * 100, // Spread wide Y
-                        (Math.random() - 0.5) * 100  // Spread wide Z
-                    ]}
-                    rotation={[Math.random() * Math.PI, Math.random() * Math.PI, 0]}
-                    scale={[2, 2, 2]} // Make them LARGE and visible
-                >
-                    <octahedronGeometry args={[1, 0]} /> {/* Diamond shape */}
-                    <meshStandardMaterial
-                        color="lime"       // Bright DEBUG Green
-                        emissive="lime"    // Glows in the dark
-                        emissiveIntensity={2}
-                        wireframe={true}   // Wireframe looks cool & techy
-                        transparent={true}
-                        opacity={0.6}
-                    />
-                </mesh>
-            ))}
-
             <Physics gravity={[0, 0, 0]}>
                 <Player />
                 <Enemies />
+                <CrystalShards />
             </Physics>
 
 

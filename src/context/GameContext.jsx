@@ -9,9 +9,9 @@ export const GameProvider = ({ children }) => {
   const [playerMass, setPlayerMass] = useState(1);
   const [gameOver, setGameOver] = useState(false);
 
-  // 升级系统：等级阈值 10^(n-1)
+  // 升级系统：等级阈值 (0, 5, 15, 30, 50)
   const MAX_LEVEL = 5;
-  const LEVEL_THRESHOLDS = [0, 10, 100, 1000, 10000]; // 1级=0分, 2级=10分, ..., 5级=10000分
+  const LEVEL_THRESHOLDS = [0, 5, 15, 30, 50];
 
   const level = useMemo(() => {
     for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
@@ -30,6 +30,13 @@ export const GameProvider = ({ children }) => {
 
   const addScore = (points) => {
     setScore((s) => s + points);
+  };
+
+  const forceLevelUp = () => {
+    if (level < MAX_LEVEL) {
+      const nextThreshold = LEVEL_THRESHOLDS[level];
+      setScore(nextThreshold);
+    }
   };
 
   // 等级速度系数：1级=0.2x, 每级+0.2x
@@ -53,7 +60,7 @@ export const GameProvider = ({ children }) => {
   const landmarksRef = React.useRef(null);
 
   return (
-    <GameContext.Provider value={{ score, playerMass, gameOver, setGameOver, grow, addScore, reset, controlsRef, landmarksRef, level, nextLevelScore, MAX_LEVEL, speedMultiplier }}>
+    <GameContext.Provider value={{ score, playerMass, gameOver, setGameOver, grow, addScore, forceLevelUp, reset, controlsRef, landmarksRef, level, nextLevelScore, MAX_LEVEL, speedMultiplier }}>
       {children}
     </GameContext.Provider>
   );
