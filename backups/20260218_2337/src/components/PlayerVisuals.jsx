@@ -92,22 +92,19 @@ const PlasmaMaterial = shaderMaterial(
 extend({ PlasmaMaterial });
 
 // --- Rotating Ring Component ---
-const RotatingRing = ({ radius, color, axis, speed, matRef }) => {
+const RotatingRing = ({ radius, color, axis, speed }) => {
     const ringRef = useRef();
-    const localMatRef = useRef();
-    const currentSpeedRef = useRef(speed);
     useFrame((state, delta) => {
         if (ringRef.current) {
-            currentSpeedRef.current += (speed - currentSpeedRef.current) * 0.02;
-            ringRef.current.rotation[axis] += delta * currentSpeedRef.current;
+            ringRef.current.rotation[axis] += delta * speed;
         }
     });
 
     return (
         <group ref={ringRef}>
             <mesh rotation={[Math.PI / 2, 0, 0]}>
-                <torusGeometry args={[radius, 0.05, 12, 32]} />
-                <meshBasicMaterial ref={matRef || localMatRef} color={color} toneMapped={false} />
+                <torusGeometry args={[radius, 0.05, 16, 64]} />
+                <meshBasicMaterial color={color} toneMapped={false} />
             </mesh>
         </group>
     );
@@ -117,7 +114,7 @@ const RotatingRing = ({ radius, color, axis, speed, matRef }) => {
 const Level1Visuals = () => (
     <mesh castShadow receiveShadow>
         <sphereGeometry args={[0.5, 32, 32]} />
-        <meshStandardMaterial color="#444" roughness={0.8} metalness={0.2} transparent opacity={0.75} />
+        <meshStandardMaterial color="#444" roughness={0.8} metalness={0.2} />
     </mesh>
 );
 
@@ -141,8 +138,6 @@ const Level2Visuals = () => {
                     emissive="#00f3ff"
                     emissiveIntensity={1.5}
                     roughness={0.4}
-                    transparent
-                    opacity={0.75}
                 />
             </mesh>
         </Trail>
@@ -176,10 +171,9 @@ const Level4Visuals = () => {
 
     useFrame((state) => {
         if (meshRef.current) {
-            const t = state.clock.getElapsedTime();
-            meshRef.current.position.x = Math.sin(t * 12) * 0.02;
-            meshRef.current.position.y = Math.cos(t * 15) * 0.02;
-            meshRef.current.position.z = Math.sin(t * 10 + 1) * 0.02;
+            meshRef.current.position.x = (Math.random() - 0.5) * 0.05;
+            meshRef.current.position.y = (Math.random() - 0.5) * 0.05;
+            meshRef.current.position.z = (Math.random() - 0.5) * 0.05;
         }
     });
 
@@ -188,16 +182,16 @@ const Level4Visuals = () => {
             {/* Main Body */}
             <mesh ref={meshRef}>
                 <sphereGeometry args={[0.6, 32, 32]} />
-                <meshStandardMaterial color="#ff4500" emissive="#ff2200" emissiveIntensity={4} toneMapped={false} transparent opacity={0.75} />
+                <meshStandardMaterial color="#ff4500" emissive="#ff2200" emissiveIntensity={4} toneMapped={false} />
             </mesh>
 
             {/* Aura Particles */}
-            <Sparkles count={20} scale={3} size={4} speed={0.4} opacity={0.5} color="#ffaa00" noise={0.5} />
+            <Sparkles count={50} scale={3} size={4} speed={0.4} opacity={0.5} color="#ffaa00" noise={0.5} />
 
-            <RotatingRing radius={0.7} color="#ff4500" axis="y" speed={1.5} />
-            <RotatingRing radius={0.85} color="#ffaa00" axis="x" speed={1} />
+            <RotatingRing radius={0.9} color="#ff4500" axis="y" speed={1.5} />
+            <RotatingRing radius={1.1} color="#ffaa00" axis="x" speed={1} />
 
-            <Trail width={8} length={8} color="#ff4500" attenuation={(t) => t * t}>
+            <Trail width={8} length={12} color="#ff4500" attenuation={(t) => t * t}>
                 <mesh visible={false}><sphereGeometry args={[0.1]} /></mesh>
             </Trail>
         </group>
@@ -208,9 +202,7 @@ const Level4Visuals = () => {
 const Level5Visuals = () => {
     const groupRef = useRef();
     const diskRef = useRef();
-    const ring1MatRef = useRef();
-    const ring2MatRef = useRef();
-    const ring3MatRef = useRef();
+    const [color, setColor] = useState(new THREE.Color());
 
     useFrame((state, delta) => {
         // Rotate accretion disk
@@ -219,43 +211,37 @@ const Level5Visuals = () => {
             diskRef.current.rotation.z += delta * 0.5;
         }
 
-        // Color shift for rings (用 ref 直接修改材质，不触发 React 重渲染)
+        // Color shift for rings
         const t = state.clock.getElapsedTime();
-        const hsl = (Math.sin(t * 0.5) + 1) * 0.5;
-        const c = new THREE.Color().setHSL(hsl, 1, 0.5);
-        [ring1MatRef, ring2MatRef, ring3MatRef].forEach(ref => {
-            if (ref.current) {
-                ref.current.color.copy(c);
-            }
-        });
+        setColor(new THREE.Color().setHSL((Math.sin(t * 0.5) + 1) * 0.5, 1, 0.5));
     });
 
     return (
         <group ref={groupRef}>
             {/* Core - Pure black hole */}
             <mesh>
-                <sphereGeometry args={[0.6, 32, 32]} />
-                <meshStandardMaterial color="#000000" roughness={0} metalness={1} transparent opacity={0.8} />
+                <sphereGeometry args={[0.6, 64, 64]} />
+                <meshStandardMaterial color="#000000" roughness={0} metalness={1} />
             </mesh>
 
             {/* Event Horizon Glow */}
             <mesh>
-                <sphereGeometry args={[0.65, 24, 24]} />
+                <sphereGeometry args={[0.65, 32, 32]} />
                 <meshBasicMaterial color="#ffffff" side={THREE.BackSide} transparent opacity={0.5} />
             </mesh>
 
-            {/* Accretion Disk Particles (大幅减少) */}
+            {/* Accretion Disk Particles */}
             <group ref={diskRef}>
-                <Sparkles count={40} scale={[4, 0.2, 4]} size={3} speed={0.2} opacity={0.8} color="#a020f0" />
-                <Sparkles count={30} scale={[5, 0.1, 5]} size={2} speed={0.5} opacity={0.6} color="#00ffff" />
+                <Sparkles count={200} scale={[4, 0.2, 4]} size={3} speed={0.2} opacity={0.8} color="#a020f0" />
+                <Sparkles count={200} scale={[5, 0.1, 5]} size={2} speed={0.5} opacity={0.6} color="#00ffff" />
             </group>
 
-            <RotatingRing radius={0.8} color="#a020f0" axis="y" speed={2} matRef={ring1MatRef} />
-            <RotatingRing radius={0.95} color="#a020f0" axis="x" speed={1.5} matRef={ring2MatRef} />
-            <RotatingRing radius={1.1} color="#a020f0" axis="z" speed={1} matRef={ring3MatRef} />
+            <RotatingRing radius={1.0} color={color} axis="y" speed={2} />
+            <RotatingRing radius={1.2} color={color} axis="x" speed={1.5} />
+            <RotatingRing radius={1.4} color={color} axis="z" speed={1} />
 
             {/* Vortex Trail */}
-            <Trail width={10} length={14} color="#9400d3" attenuation={(t) => t * t * t}>
+            <Trail width={12} length={20} color="#9400d3" attenuation={(t) => t * t * t}>
                 <mesh visible={false}><sphereGeometry args={[0.1]} /></mesh>
             </Trail>
         </group>

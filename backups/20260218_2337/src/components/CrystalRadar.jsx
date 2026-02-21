@@ -180,53 +180,6 @@ export const CrystalRadar = () => {
             }
 
             // === 玩家小球 (中心锁定) ===
-            // === 敌对NPC红色点 ===
-            const npcPositions = window.npcPositions;
-            if (pp && npcPositions) {
-                const npcIds = Object.keys(npcPositions);
-                for (let ni = 0; ni < npcIds.length; ni++) {
-                    const npc = npcPositions[npcIds[ni]];
-                    if (!npc) continue;
-
-                    const rawDx = npc.x - pp.x;
-                    const rawDz = npc.z - pp.z;
-                    const dist = Math.sqrt(rawDx * rawDx + rawDz * rawDz);
-                    if (dist > RADAR_RANGE) continue;
-
-                    const yaw = cameraYawRef?.current || 0;
-                    const cosY = Math.cos(-yaw + Math.PI / 2);
-                    const sinY = Math.sin(-yaw + Math.PI / 2);
-                    const dx = rawDx * cosY - rawDz * sinY;
-                    const dz = rawDx * sinY + rawDz * cosY;
-
-                    const rx = cx + (dx / RADAR_RANGE) * radius;
-                    const ry = cy - (dz / RADAR_RANGE) * radius;
-
-                    // NPC 始终可见（红色威胁，不需要扫描触发）
-                    const dotSize = 3 + 2 * (1 - dist / RADAR_RANGE);
-
-                    // 红色脉冲效果
-                    const pulse = 0.7 + 0.3 * Math.sin(currentTime * 4 + ni);
-
-                    ctx.beginPath();
-                    ctx.arc(rx, ry, dotSize, 0, Math.PI * 2);
-                    ctx.fillStyle = `rgba(255, 32, 32, ${pulse * 0.9})`;
-                    ctx.shadowBlur = 6 + pulse * 6;
-                    ctx.shadowColor = '#ff2020';
-                    ctx.fill();
-                    ctx.shadowBlur = 0;
-
-                    // 外圈警告环
-                    if (dist < 60) {
-                        ctx.beginPath();
-                        ctx.arc(rx, ry, dotSize + 3, 0, Math.PI * 2);
-                        ctx.strokeStyle = `rgba(255, 50, 50, ${pulse * 0.4})`;
-                        ctx.lineWidth = 1;
-                        ctx.stroke();
-                    }
-                }
-            }
-
             // 外层光晕
             const playerGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 10);
             playerGlow.addColorStop(0, 'rgba(0, 243, 255, 0.6)');

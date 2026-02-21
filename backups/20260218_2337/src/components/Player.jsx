@@ -16,7 +16,7 @@ const MOUSE_SENSITIVITY = 0.003;
 export const Player = () => {
     const body = useRef();
     const { camera, gl } = useThree();
-    const { controlsRef, speedMultiplier, forceLevelUp, forceLevelDown, addExperience, level, playerPosRef, cameraYawRef, dashStateRef, shieldStateRef, laserStateRef, rageStateRef, ultimateStateRef } = useGame();
+    const { controlsRef, speedMultiplier, forceLevelUp, level, playerPosRef, cameraYawRef, dashStateRef, shieldStateRef, laserStateRef } = useGame();
     const [showLevelUpEffect, setShowLevelUpEffect] = React.useState(false);
 
     // 监听等级变化，触发特效
@@ -29,30 +29,20 @@ export const Player = () => {
         prevLevel.current = level;
     }, [level]);
 
-    // Alt+L 升级 + 瞬间重置所有冷却 + 充满必杀技
+    // Alt+L 升级快捷键
     useEffect(() => {
         const onKeyDown = (e) => {
             if (e.altKey && (e.key === 'l' || e.key === 'L')) {
                 forceLevelUp();
-                // 重置所有技能冷却
-                dashRef.current.cooldownTimer = 0;
-                shieldRef.current.cooldownTimer = 0;
-                laserRef.current.cooldownTimer = 0;
-                rageRef.current.cooldownTimer = 0;
-                rageRef.current.active = false;
-                // 充满必杀技
-                ultimateRef.current.charge = 1.0;
-            }
-            if (e.altKey && (e.key === 'd' || e.key === 'D')) {
-                e.preventDefault();
-                forceLevelDown();
             }
         };
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
-    }, [forceLevelUp, forceLevelDown]);
+    }, [forceLevelUp]);
 
-    // THRUST 和 MAX_SPEED 在 useFrame 内计算（受狂暴模式影响）
+    // 根据等级调整速度
+    const THRUST = BASE_THRUST * speedMultiplier;
+    const MAX_SPEED = BASE_MAX_SPEED * speedMultiplier;
 
     // 摄像头球坐标：yaw（水平角）和 pitch（垂直角）
     const camYaw = useRef(Math.PI); // 初始从后方看
@@ -118,7 +108,7 @@ export const Player = () => {
     }, [level]);
 
     // --- 激光系统 ---
-    const LASER_COOLDOWN = level >= 5 ? 1.0 : 2.0;
+    const LASER_COOLDOWN = 2.0;
     const laserRef = useRef({
         cooldownTimer: 0,
     });
@@ -129,14 +119,18 @@ export const Player = () => {
             if ((e.key === 'c' || e.key === 'C') && !e.altKey && !e.ctrlKey) {
                 if (level >= 4 && laserRef.current.cooldownTimer <= 0) {
                     laserRef.current.cooldownTimer = LASER_COOLDOWN;
-                    // 使用摄像机实际朝向（十字准星方向）
-                    const fwd = camera.getWorldDirection(new Vector3());
+                    const yaw = camYaw.current;
+                    const pitch = camPitch.current;
+                    const dir = {
+                        x: -Math.sin(yaw) * Math.cos(pitch),
+                        y: Math.sin(pitch),
+                        z: -Math.cos(yaw) * Math.cos(pitch),
+                    };
                     const pos = body.current?.translation();
                     if (pos) {
                         window.laserShot = {
-                            origin: { x: pos.x, y: pos.y + 1.0, z: pos.z },
-                            direction: { x: fwd.x, y: fwd.y, z: fwd.z },
-                            level: level,
+                            origin: { x: pos.x, y: pos.y, z: pos.z },
+                            direction: dir,
                             time: Date.now(),
                         };
                     }
@@ -146,56 +140,6 @@ export const Player = () => {
         window.addEventListener('keydown', onLaserKey);
         return () => window.removeEventListener('keydown', onLaserKey);
     }, [level]);
-
-    // --- 狂暴模式 ---
-    const RAGE_DURATION = 10.0;
-    const RAGE_COOLDOWN = 25.0;
-    const rageRef = useRef({
-        active: false,
-        timer: 0,
-        cooldownTimer: 0,
-    });
-
-    // V 键监听
-    useEffect(() => {
-        const onRageKey = (e) => {
-            if ((e.key === 'v' || e.key === 'V') && !e.altKey && !e.ctrlKey) {
-                if (level >= 5 && !rageRef.current.active && rageRef.current.cooldownTimer <= 0) {
-                    rageRef.current.active = true;
-                    rageRef.current.timer = RAGE_DURATION;
-                    rageRef.current.cooldownTimer = RAGE_COOLDOWN;
-                }
-            }
-        };
-        window.addEventListener('keydown', onRageKey);
-        return () => window.removeEventListener('keydown', onRageKey);
-    }, [level]);
-
-    // --- 必杀技（黑洞） ---
-    const ULTIMATE_DURATION = 5.0;
-    const ULTIMATE_RADIUS = 80;
-    const GOLDEN_SHIELD_DURATION = 10.0;
-    const ultimateRef = useRef({
-        charge: 0,    // 0~1
-        active: false,
-        timer: 0,
-    });
-    const goldenShieldRef = useRef(0); // 金色护盾剩余时间
-
-    // B 键监听
-    useEffect(() => {
-        const onUltKey = (e) => {
-            if ((e.key === 'b' || e.key === 'B') && !e.altKey && !e.ctrlKey) {
-                if (ultimateRef.current.charge >= 1.0 && !ultimateRef.current.active) {
-                    ultimateRef.current.active = true;
-                    ultimateRef.current.timer = ULTIMATE_DURATION;
-                    ultimateRef.current.charge = 0;
-                }
-            }
-        };
-        window.addEventListener('keydown', onUltKey);
-        return () => window.removeEventListener('keydown', onUltKey);
-    }, []);
 
     // Pointer Lock 鼠标控制
     useEffect(() => {
@@ -247,20 +191,12 @@ export const Player = () => {
 
     const [, getKeys] = useKeyboardControls();
 
-    useFrame((state, delta) => {
+    useFrame(() => {
         if (!body.current) return;
-
-        // 清除角速度（防止碰撞后光环乱转）
-        body.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
 
         const { forward, backward, left, right } = getKeys();
         const gesture = window.handGesture;
         const controls = controlsRef?.current;
-
-        // 狂暴模式下速度翻倍
-        const rageMultiplier = rageRef.current.active ? 2 : 1;
-        const THRUST = BASE_THRUST * speedMultiplier * rageMultiplier;
-        const MAX_SPEED = BASE_MAX_SPEED * speedMultiplier * rageMultiplier;
 
         // 根据摄像头 yaw + pitch 计算完整3D方向（太空中移动跟随视角）
         const yaw = camYaw.current;
@@ -317,7 +253,7 @@ export const Player = () => {
         // 施加推力
         if (impulse.length() > 0) {
             body.current.applyImpulse(
-                { x: impulse.x * delta, y: impulse.y * delta, z: impulse.z * delta },
+                { x: impulse.x * 0.016, y: impulse.y * 0.016, z: impulse.z * 0.016 },
                 true
             );
         }
@@ -325,10 +261,10 @@ export const Player = () => {
         // --- 冲刺逻辑 ---
         const dash = dashRef.current;
         if (dash.cooldownTimer > 0) {
-            dash.cooldownTimer -= delta * (rageRef.current.active ? 2 : 1);
+            dash.cooldownTimer -= 0.016;
         }
         if (dash.active) {
-            dash.timer -= delta;
+            dash.timer -= 0.016;
             if (dash.timer <= 0) {
                 dash.active = false;
                 dash.timer = 0;
@@ -342,7 +278,6 @@ export const Player = () => {
                 }, true);
             }
         }
-        window.dashActive = dash.active;
         // 更新冲刺状态供UI读取
         dashStateRef.current = {
             active: dash.active,
@@ -353,7 +288,7 @@ export const Player = () => {
         // --- 护盾逻辑 ---
         const shield = shieldRef.current;
         if (shield.cooldownTimer > 0 && !shield.active) {
-            shield.cooldownTimer -= delta * (rageRef.current.active ? 2 : 1);
+            shield.cooldownTimer -= 0.016;
         }
         // 检查护盾是否被碰撞打破（由 window.shieldActive 标记）
         if (shield.active && !window.shieldActive) {
@@ -369,77 +304,12 @@ export const Player = () => {
         // --- 激光冷却 ---
         const laser = laserRef.current;
         if (laser.cooldownTimer > 0) {
-            laser.cooldownTimer -= delta * (rageRef.current.active ? 2 : 1);
+            laser.cooldownTimer -= 0.016;
         }
         laserStateRef.current = {
             active: laser.cooldownTimer > LASER_COOLDOWN - 0.3, // 前0.3秒显示活跃
             cooldownLeft: Math.max(laser.cooldownTimer, 0),
             ready: laser.cooldownTimer <= 0 && level >= 4,
-        };
-
-        // --- 狂暴模式逻辑 ---
-        const rage = rageRef.current;
-        if (rage.cooldownTimer > 0 && !rage.active) {
-            rage.cooldownTimer -= delta;
-        }
-        if (rage.active) {
-            rage.timer -= delta;
-            if (rage.timer <= 0) {
-                rage.active = false;
-                rage.timer = 0;
-            }
-        }
-        window.rageActive = rage.active;
-        rageStateRef.current = {
-            active: rage.active,
-            cooldownLeft: Math.max(rage.cooldownTimer, 0),
-            ready: !rage.active && rage.cooldownTimer <= 0 && level >= 5,
-        };
-
-        // --- 必杀技逻辑 ---
-        const ult = ultimateRef.current;
-        // 检查水晶击破充能
-        if (window.ultimateChargeAdd) {
-            ult.charge = Math.min(ult.charge + window.ultimateChargeAdd, 1.0);
-            window.ultimateChargeAdd = 0;
-        }
-        // 收集黑洞经验
-        if (window.blackHoleExp) {
-            addExperience(window.blackHoleExp);
-            window.blackHoleExp = 0;
-        }
-        if (ult.active) {
-            ult.timer -= delta;
-            if (ult.timer <= 0) {
-                ult.active = false;
-                ult.timer = 0;
-                // 结束后赠送金色无敌护盾
-                goldenShieldRef.current = GOLDEN_SHIELD_DURATION;
-            }
-        }
-        // --- 金色护盾计时 ---
-        if (goldenShieldRef.current > 0) {
-            goldenShieldRef.current -= delta;
-            window.goldenShieldActive = true;
-        } else {
-            window.goldenShieldActive = false;
-        }
-        // 设置全局黑洞状态
-        if (ult.active) {
-            const pos = body.current?.translation();
-            window.blackHoleActive = {
-                x: pos?.x || 0,
-                y: pos?.y || 0,
-                z: pos?.z || 0,
-                radius: ULTIMATE_RADIUS,
-            };
-        } else {
-            window.blackHoleActive = null;
-        }
-        ultimateStateRef.current = {
-            charge: ult.charge,
-            active: ult.active,
-            ready: ult.charge >= 1.0 && !ult.active,
         };
 
         // 限制最大速度 (冲刺时不限制)
@@ -474,7 +344,7 @@ export const Player = () => {
 
         const targetCamPos = playerPos.clone().add(camOffset);
 
-        // 直接设置摄像头位置
+        // 直接设置摄像头位置，不用 lerp，避免抖动
         camera.position.copy(targetCamPos);
 
         // 始终看向玩家

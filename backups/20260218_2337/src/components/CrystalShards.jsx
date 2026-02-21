@@ -21,7 +21,7 @@ const randomPosInShell = (center = { x: 0, y: 0, z: 0 }, innerR = MIN_SPAWN_DIST
 };
 
 export const CrystalShards = () => {
-    const { takeDamage, playerPosRef, crystalPosRef } = useGame();
+    const { addScore, playerPosRef, crystalPosRef } = useGame();
     const shardRefs = useRef([]);
     const lastCrystalLaserRef = useRef(0);
 
@@ -89,55 +89,18 @@ export const CrystalShards = () => {
             if (closestRef) {
                 const newPos = randomPosInShell(pp);
                 closestRef.setTranslation({ x: newPos[0], y: newPos[1], z: newPos[2] }, true);
-                // 击破水晶给必杀技充能20%
-                window.ultimateChargeAdd = (window.ultimateChargeAdd || 0) + 0.2;
             }
-        }
-
-        // --- 黑洞吸引 ---
-        const bh = window.blackHoleActive;
-        if (bh) {
-            shardRefs.current.forEach((ref) => {
-                if (!ref) return;
-                const t = ref.translation();
-                const dx = bh.x - t.x;
-                const dy = bh.y - t.y;
-                const dz = bh.z - t.z;
-                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                if (dist < bh.radius) {
-                    if (dist < 2) {
-                        // 吞噬：传送走 + 给经验
-                        const newPos = randomPosInShell(pp);
-                        ref.setTranslation({ x: newPos[0], y: newPos[1], z: newPos[2] }, true);
-                        ref.setLinvel({ x: 0, y: 0, z: 0 }, true);
-                        window.blackHoleExp = (window.blackHoleExp || 0) + 0.5;
-                    } else {
-                        // 拉向黑洞中心
-                        const pull = 50 / Math.max(dist, 1);
-                        const nx = dx / dist;
-                        const ny = dy / dist;
-                        const nz = dz / dist;
-                        ref.setLinvel({
-                            x: nx * pull,
-                            y: ny * pull,
-                            z: nz * pull,
-                        }, true);
-                    }
-                }
-            });
         }
     });
 
     const handleCollision = useCallback((e) => {
         const other = e.other?.rigidBodyObject;
         if (other?.userData?.type === 'player') {
-            if (window.rageActive || window.goldenShieldActive) {
-                // 狂暴模式：无敌，不受伤
-                return;
-            }
             if (window.shieldActive) {
+                // 护盾吸收碰撞：水晶碎片消失（传送走），护盾碎裂
                 window.shieldActive = false;
-                window.shieldBroken = true;
+                window.shieldBroken = true; // 触发碎裂特效
+                // 传送碰到的水晶到远处
                 const self = e.target;
                 if (self) {
                     const pp = playerPosRef.current;
@@ -145,10 +108,10 @@ export const CrystalShards = () => {
                     self.setTranslation({ x: newPos[0], y: newPos[1], z: newPos[2] }, true);
                 }
             } else {
-                takeDamage(1);
+                addScore(-0.1);
             }
         }
-    }, [takeDamage, playerPosRef]);
+    }, [addScore, playerPosRef]);
 
     return (
         <>

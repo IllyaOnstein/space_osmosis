@@ -243,51 +243,6 @@ export const Enemies = () => {
                 handleCollect(closestOrbId);
             }
         }
-
-        // --- 黑洞吸引大天体 ---
-        const bh = window.blackHoleActive;
-        if (bh) {
-            largeRefs.current.forEach((ref) => {
-                if (!ref) return;
-                const t = ref.translation();
-                const dx = bh.x - t.x;
-                const dy = bh.y - t.y;
-                const dz = bh.z - t.z;
-                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                if (dist < bh.radius) {
-                    if (dist < 3) {
-                        // 吞噬
-                        const newPos = randomPosInShell(pp, MIN_SPAWN_DIST + 50, MAX_SPAWN_DIST + 50);
-                        ref.setTranslation({ x: newPos[0], y: newPos[1], z: newPos[2] }, true);
-                        ref.setLinvel({ x: 0, y: 0, z: 0 }, true);
-                        window.blackHoleExp = (window.blackHoleExp || 0) + 1;
-                    } else {
-                        const pull = 60 / Math.max(dist, 1);
-                        const nx = dx / dist;
-                        const ny = dy / dist;
-                        const nz = dz / dist;
-                        ref.setLinvel({
-                            x: nx * pull,
-                            y: ny * pull,
-                            z: nz * pull,
-                        }, true);
-                    }
-                }
-            });
-
-            // 黑洞吸引小球
-            smallList.forEach((orb) => {
-                if (collected.has(orb.id)) return;
-                const dx = bh.x - orb.position[0];
-                const dy = bh.y - orb.position[1];
-                const dz = bh.z - orb.position[2];
-                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                if (dist < bh.radius && dist < 5) {
-                    handleCollect(orb.id);
-                }
-            });
-        }
-
     });
 
     // 小天体列表

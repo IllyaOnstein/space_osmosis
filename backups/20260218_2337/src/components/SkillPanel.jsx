@@ -5,7 +5,6 @@ const ICON_SIZE = 56;
 const DASH_COOLDOWN = 5.0;
 const SHIELD_COOLDOWN = 10.0;
 const LASER_COOLDOWN = 2.0;
-const RAGE_COOLDOWN = 25.0;
 
 // 绘制单个技能图标
 const drawSkillIcon = (ctx, cx, cy, r, state, unlocked, drawIcon, keyLabel, lockLabel, activeColor, cooldownTotal) => {
@@ -180,186 +179,10 @@ const drawCrosshair = (ctx, unlocked, state) => {
     ctx.shadowBlur = 0;
 };
 
-// 火焰图标 (狂暴)
-const drawRageFire = (ctx, unlocked, state) => {
-    const color = unlocked
-        ? (state.active ? '#ff00ff' : (state.ready ? '#cc44ff' : 'rgba(150, 50, 200, 0.3)'))
-        : 'rgba(80, 80, 80, 0.5)';
-
-    if (state.active) {
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = '#ff00ff';
-    }
-
-    // 火焰主体
-    ctx.beginPath();
-    ctx.moveTo(0, 13);
-    ctx.quadraticCurveTo(-8, 2, -6, -4);
-    ctx.quadraticCurveTo(-4, -8, -2, -13);
-    ctx.quadraticCurveTo(0, -8, 2, -13);
-    ctx.quadraticCurveTo(4, -8, 6, -4);
-    ctx.quadraticCurveTo(8, 2, 0, 13);
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
-
-    // 内焰
-    ctx.beginPath();
-    ctx.moveTo(0, 10);
-    ctx.quadraticCurveTo(-3, 4, -2, -2);
-    ctx.quadraticCurveTo(0, -6, 2, -2);
-    ctx.quadraticCurveTo(3, 4, 0, 10);
-    ctx.closePath();
-    ctx.fillStyle = unlocked
-        ? (state.active ? '#ffaaff' : (state.ready ? '#dd88ff' : 'rgba(180, 100, 220, 0.3)'))
-        : 'rgba(100, 100, 100, 0.3)';
-    ctx.fill();
-
-    ctx.shadowBlur = 0;
-};
-
-// 必杀技图标（黑洞漩涡 + 充能 + 电弧特效）
-const drawUltimateIcon = (ctx, cx, cy, r, ultState) => {
-    const charge = ultState.charge || 0;
-    const isReady = ultState.ready;
-    const isActive = ultState.active;
-
-    ctx.save();
-
-    // === 背景圈 ===
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fillStyle = isActive
-        ? 'rgba(20, 0, 40, 0.9)'
-        : (isReady ? 'rgba(40, 0, 80, 0.6)' : 'rgba(15, 15, 30, 0.7)');
-    ctx.fill();
-
-    // === 充能进度环 ===
-    if (charge > 0 && !isActive) {
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * charge, false);
-        ctx.closePath();
-        ctx.fillStyle = isReady
-            ? 'rgba(150, 50, 255, 0.35)'
-            : 'rgba(80, 30, 200, 0.25)';
-        ctx.fill();
-    }
-
-    // === 边框 ===
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.strokeStyle = isActive
-        ? 'rgba(200, 100, 255, 0.9)'
-        : (isReady ? 'rgba(150, 80, 255, 0.9)' : `rgba(80, 40, 150, ${0.3 + charge * 0.4})`);
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // === 黑洞漩涡图标 ===
-    ctx.save();
-    ctx.translate(cx, cy);
-    const t = Date.now() * 0.002;
-    const iconColor = isActive
-        ? '#dd88ff'
-        : (isReady ? '#bb66ff' : `rgba(120, 60, 200, ${0.3 + charge * 0.5})`);
-
-    // 中心实心圆
-    ctx.beginPath();
-    ctx.arc(0, 0, 4, 0, Math.PI * 2);
-    ctx.fillStyle = iconColor;
-    if (isActive || isReady) {
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = '#aa44ff';
-    }
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // 漩涡弧线
-    for (let i = 0; i < 3; i++) {
-        const angleOff = (Math.PI * 2 / 3) * i + (isActive ? t : 0);
-        ctx.beginPath();
-        ctx.arc(0, 0, 9, angleOff, angleOff + 1.2);
-        ctx.strokeStyle = iconColor;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-    }
-    ctx.restore();
-
-    // === 电弧特效（100%充满时） ===
-    if (isReady && !isActive) {
-        ctx.save();
-        const sparkCount = 4;
-        for (let i = 0; i < sparkCount; i++) {
-            const angle = t * 3 + (Math.PI * 2 / sparkCount) * i;
-            const x1 = cx + Math.cos(angle) * (r - 2);
-            const y1 = cy + Math.sin(angle) * (r - 2);
-            const x2 = cx + Math.cos(angle + 0.3) * (r + 5);
-            const y2 = cy + Math.sin(angle + 0.3) * (r + 5);
-            const mx = (x1 + x2) / 2 + (Math.random() - 0.5) * 6;
-            const my = (y1 + y2) / 2 + (Math.random() - 0.5) * 6;
-
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(mx, my);
-            ctx.lineTo(x2, y2);
-            ctx.strokeStyle = `rgba(180, 140, 255, ${0.5 + Math.random() * 0.5})`;
-            ctx.lineWidth = 1;
-            ctx.shadowBlur = 6;
-            ctx.shadowColor = '#aa88ff';
-            ctx.stroke();
-        }
-        ctx.shadowBlur = 0;
-
-        // 发光脉冲
-        ctx.beginPath();
-        ctx.arc(cx, cy, r + 3, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(150, 80, 255, ${0.3 + Math.sin(t * 4) * 0.2})`;
-        ctx.lineWidth = 2;
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = '#9944ff';
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-        ctx.restore();
-    }
-
-    // === 激活时高亮 ===
-    if (isActive) {
-        ctx.beginPath();
-        ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(200, 100, 255, 0.5)';
-        ctx.lineWidth = 3;
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = '#cc66ff';
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-    }
-
-    // === 充能百分比 ===
-    if (!isReady && !isActive && charge < 1.0) {
-        ctx.font = "bold 11px 'Orbitron', monospace";
-        ctx.fillStyle = 'rgba(180, 150, 255, 0.8)';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(`${Math.floor(charge * 100)}%`, cx, cy + 1);
-    }
-
-    // === 按键提示 ===
-    ctx.font = "bold 10px 'Orbitron', monospace";
-    ctx.fillStyle = isReady
-        ? 'rgba(150, 80, 255, 0.9)'
-        : `rgba(80, 40, 150, ${0.3 + charge * 0.4})`;
-    ctx.textAlign = 'center';
-    ctx.fillText('B', cx, cy + r + 14);
-
-    ctx.restore();
-};
-
 export const SkillPanel = () => {
     const canvasRef = useRef(null);
-    const ultCanvasRef = useRef(null);
-    const { dashStateRef, shieldStateRef, laserStateRef, rageStateRef, ultimateStateRef, level } = useGame();
+    const { dashStateRef, shieldStateRef, laserStateRef, level } = useGame();
 
-    // 技能图标渲染
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -377,52 +200,27 @@ export const SkillPanel = () => {
             const r = ICON_SIZE / 2 - 4;
             const spacing = ICON_SIZE + 12;
 
+            // 冲刺图标
             const dashCx = ICON_SIZE / 2 + 4;
             const cy = H / 2;
             drawSkillIcon(ctx, dashCx, cy, r, dashState, level >= 2, drawLightning, 'Z', 'LV2', '0, 229, 255', DASH_COOLDOWN);
 
+            // 护盾图标
             const shieldCx = dashCx + spacing;
             drawSkillIcon(ctx, shieldCx, cy, r, shieldState, level >= 3, drawShield, 'X', 'LV3', '0, 255, 170', SHIELD_COOLDOWN);
 
+            // 激光图标
             const laserCx = shieldCx + spacing;
             drawSkillIcon(ctx, laserCx, cy, r, laserState, level >= 4, drawCrosshair, 'C', 'LV4', '255, 68, 0', LASER_COOLDOWN);
 
-            const rageState = rageStateRef.current;
-            const rageCx = laserCx + spacing;
-            drawSkillIcon(ctx, rageCx, cy, r, rageState, level >= 5, drawRageFire, 'V', 'LV5', '200, 0, 255', RAGE_COOLDOWN);
-
             animId = requestAnimationFrame(render);
         };
 
         animId = requestAnimationFrame(render);
         return () => cancelAnimationFrame(animId);
-    }, [dashStateRef, shieldStateRef, laserStateRef, rageStateRef, level]);
+    }, [dashStateRef, shieldStateRef, laserStateRef, level]);
 
-    // 必杀技图标渲染 (2x大小)
-    useEffect(() => {
-        const canvas = ultCanvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        let animId;
-
-        const render = () => {
-            const W = canvas.width;
-            const H = canvas.height;
-            ctx.clearRect(0, 0, W, H);
-
-            const ultState = ultimateStateRef.current;
-            const ultR = ICON_SIZE - 4; // 2x radius
-            drawUltimateIcon(ctx, W / 2, H / 2, ultR, ultState);
-
-            animId = requestAnimationFrame(render);
-        };
-
-        animId = requestAnimationFrame(render);
-        return () => cancelAnimationFrame(animId);
-    }, [ultimateStateRef]);
-
-    const skillsWidth = ICON_SIZE * 4 + 12 * 3 + 16;
-    const ultSize = ICON_SIZE * 2 + 20;
+    const totalWidth = ICON_SIZE * 3 + 12 * 2 + 16;
 
     return (
         <div style={{
@@ -430,19 +228,8 @@ export const SkillPanel = () => {
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: '2px',
+            gap: '4px',
         }}>
-            {/* 必杀技大图标 (上方) */}
-            <canvas
-                ref={ultCanvasRef}
-                width={ultSize}
-                height={ultSize}
-                style={{
-                    width: `${ultSize}px`,
-                    height: `${ultSize}px`,
-                }}
-            />
-            {/* 技能标签 */}
             <div style={{
                 fontFamily: "'Orbitron', sans-serif",
                 fontSize: '9px',
@@ -452,17 +239,15 @@ export const SkillPanel = () => {
             }}>
                 SKILLS
             </div>
-            {/* 4个等级技能 (下方) */}
             <canvas
                 ref={canvasRef}
-                width={skillsWidth}
+                width={totalWidth}
                 height={ICON_SIZE + 20}
                 style={{
-                    width: `${skillsWidth}px`,
+                    width: `${totalWidth}px`,
                     height: `${ICON_SIZE + 20}px`,
                 }}
             />
         </div>
     );
 };
-

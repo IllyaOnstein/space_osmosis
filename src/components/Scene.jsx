@@ -2,10 +2,11 @@ import React, { useRef, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Physics } from '@react-three/rapier';
 import { Stars, Sparkles } from '@react-three/drei';
-import { EffectComposer, Bloom, Noise, Vignette } from '@react-three/postprocessing';
+import { EffectComposer, Bloom, Noise, Vignette, HueSaturation } from '@react-three/postprocessing';
 import { Player } from './Player';
 import { Enemies } from './Enemies';
 import { CrystalShards } from './CrystalShards';
+import { HostileNPCs } from './HostileNPCs';
 import { LaserBeam } from './LaserBeam';
 import * as THREE from 'three';
 
@@ -149,19 +150,21 @@ const nebulaFragmentShader = `
     vec3 softGold     = vec3(0.9, 0.7, 0.2);
     vec3 lavender     = vec3(0.6, 0.4, 0.9);
 
+    float pulse = 1.0 + 0.15 * sin(time * 0.15);
+    
     float cloud1 = smoothstep(-0.1, 0.5, n1 * nebulaBand);
     float cloud2 = smoothstep(0.0, 0.6, n2 * nebulaBand * 0.9);
     float dreamCloud = smoothstep(-0.2, 0.4, n3 * nebulaWide);
 
     vec3 nebulaColor = vec3(0.0);
-    nebulaColor += deepBlue * cloud1 * 0.5;
-    nebulaColor += brightPurple * cloud2 * 0.6;
-    nebulaColor += dreamCyan * cloud1 * cloud2 * 0.4;
-    nebulaColor += hotPink * smoothstep(0.2, 0.7, n1 * n2) * nebulaBand * 0.4;
-    nebulaColor += lavender * dreamCloud * 0.35;
-    nebulaColor += softGold * smoothstep(0.1, 0.6, n3 * n1) * nebulaWide * 0.25;
+    nebulaColor += deepBlue * cloud1 * 0.6 * pulse;
+    nebulaColor += brightPurple * cloud2 * 0.7 * pulse;
+    nebulaColor += dreamCyan * cloud1 * cloud2 * 0.5;
+    nebulaColor += hotPink * smoothstep(0.2, 0.7, n1 * n2) * nebulaBand * 0.5;
+    nebulaColor += lavender * dreamCloud * 0.45;
+    nebulaColor += softGold * smoothstep(0.1, 0.6, n3 * n1) * nebulaWide * 0.35;
     // 底色微光
-    nebulaColor += vec3(0.03, 0.02, 0.06) * 0.2;
+    nebulaColor += vec3(0.05, 0.03, 0.1) * 0.3;
 
     float nebulaAlpha = clamp((cloud1 + cloud2 + dreamCloud * 0.5) * 0.35, 0.0, 0.6);
 
@@ -310,6 +313,366 @@ const nebulaFragmentShader = `
     }
 
     // ==========================================
+    // Part 4b: 主银河系漩涡 (Prominent Barred Spiral)
+    // ==========================================
+    {
+      vec3 mgDir = normalize(vec3(0.0, 0.85, -0.5));
+      float mgSize = 1.2;    // 超大视角范围
+      float mgScale = 1.5;   // 低缩放 = 展开更多细节
+      float mgBright = 0.12;  // 降低基础亮度防过曝
+
+      float mga = acos(clamp(dot(dir, mgDir), -1.0, 1.0));
+      float mgMask = smoothstep(mgSize, mgSize * 0.08, mga);
+
+      if (mgMask > 0.001) {
+        vec3 mgR = normalize(cross(mgDir, vec3(0.0, 0.0, 1.0)));
+        vec3 mgU = cross(mgR, mgDir);
+        float mgx = dot(dir - mgDir, mgR) * mgScale;
+        float mgy = dot(dir - mgDir, mgU) * mgScale;
+
+        float mgRadius = sqrt(mgx * mgx + mgy * mgy);
+        float mgTheta = atan(mgy, mgx);
+
+        // 多层噪声细节
+        float detail1 = snoise(vec3(mgx * 8.0, mgy * 8.0, 0.5)) * 0.5 + 0.5;
+        float detail2 = snoise(vec3(mgx * 16.0, mgy * 16.0, 1.0)) * 0.5 + 0.5;
+        float fineDetail = detail1 * 0.7 + detail2 * 0.3;
+
+        // 核心：紧凑明亮 + 棒状结构 (收缩核心范围以防过曝)
+        float mgCore = exp(-mgRadius * mgRadius * 12.0);
+        float barAngle = atan(mgy, mgx);
+        float bar = exp(-pow(sin(barAngle) * mgRadius * 3.0, 2.0)) * exp(-mgRadius * 3.5) * 0.6;
+
+        // 4条螺旋臂 — 更紧密的缠绕
+        float tightness = 0.55;
+        float s1 = mgTheta - tightness * log(max(mgRadius, 0.005));
+        float s2 = s1 + 1.5708;
+        float s3 = s1 + 3.14159;
+        float s4 = s1 + 4.71239;
+        float sharpness = 5.0;  // 更锐利的臂
+        float a1 = exp(-pow(sin(s1) * mgRadius, 2.0) * sharpness);
+        float a2 = exp(-pow(sin(s2) * mgRadius, 2.0) * sharpness);
+        float a3 = exp(-pow(sin(s3) * mgRadius, 2.0) * sharpness);
+        float a4 = exp(-pow(sin(s4) * mgRadius, 2.0) * sharpness);
+        float armFalloff = exp(-mgRadius * 0.28);
+        float allArms = (a1 + a2 + a3 + a4) * smoothstep(0.0, 0.12, mgRadius) * armFalloff;
+
+        // 强尘埃带：臂间区域压暗，增加对比度
+        float maxArm = max(max(a1, a2), max(a3, a4));
+        float dustLane = 1.0 - (1.0 - maxArm) * 0.7 * exp(-mgRadius * 0.4);
+
+        // 核心：金黄暖色 (降低整体倍率)
+        vec3 coreColor = vec3(1.0, 0.88, 0.5) * mgCore * 0.8;
+        vec3 barColor = vec3(1.0, 0.82, 0.5) * bar * 0.4;
+
+        // 螺旋臂：带噪声纹理，降低颜色倍率防溢出
+        vec3 armColor = vec3(0.5, 0.7, 1.0)  * a1 * exp(-mgRadius * 0.25) * (0.4 + fineDetail * 0.2)
+                      + vec3(0.7, 0.65, 1.0) * a2 * exp(-mgRadius * 0.25) * (0.3 + fineDetail * 0.2)
+                      + vec3(0.4, 0.75, 1.0) * a3 * exp(-mgRadius * 0.25) * (0.4 + fineDetail * 0.2)
+                      + vec3(0.8, 0.55, 0.9) * a4 * exp(-mgRadius * 0.25) * (0.3 + fineDetail * 0.15);
+
+        // HII发射星云区（臂上的粉红色亮点）
+        float hiiNoise = pow(snoise(vec3(mgx * 12.0, mgy * 12.0, 2.0)) * 0.5 + 0.5, 4.0);
+        vec3 hiiColor = vec3(1.0, 0.3, 0.5) * hiiNoise * allArms * 0.2;
+
+        // 星团细节：臂上的微小亮点
+        float clusterNoise = pow(snoise(vec3(mgx * 20.0, mgy * 20.0, 3.0)) * 0.5 + 0.5, 5.0);
+        vec3 clusterColor = vec3(1.0, 0.95, 0.9) * clusterNoise * allArms * 0.2;
+
+        // 弥漫光晕（星系外围柔光）
+        float halo = exp(-mgRadius * 0.12) * mgMask * 0.03;
+        vec3 haloColor = vec3(0.3, 0.35, 0.5) * halo;
+
+        // 臂间弥散（让臂不是孤立线条，有弥漫背景）
+        float diffuse = exp(-mgRadius * 0.2) * 0.15;
+        vec3 diffuseColor = vec3(0.4, 0.42, 0.6) * diffuse * fineDetail * 0.5;
+
+        // 合成 (引入局部色调映射防过曝)
+        float noiseVar = n1 * 0.2 + 0.8;
+        vec3 combinedGalaxy = coreColor + barColor + armColor + hiiColor + clusterColor + diffuseColor;
+        // Soft-clip 防止中心纯白
+        combinedGalaxy = combinedGalaxy / (1.0 + combinedGalaxy * 0.3);
+        
+        starColor += combinedGalaxy * mgMask * mgBright * noiseVar * dustLane;
+        starColor += haloColor;
+      }
+    }
+
+    // ==========================================
+    // Part 4c: 随机彩色漩涡星云 (Random Colorful Nebulas)
+    // ==========================================
+    for (int ri = 0; ri < 3; ri++) {
+      // 这里的种子与之前流星的不同
+      float rSeed = float(ri) * 314.159 + 42.0;
+      
+      // 随机生成方向向量 (通过球面坐标)
+      float rTheta = fract(sin(rSeed * 12.34) * 5678.9) * 6.28318;
+      float rPhi = acos(2.0 * fract(sin(rSeed * 56.78) * 1234.5) - 1.0);
+      vec3 rnDir = vec3(sin(rPhi) * cos(rTheta), sin(rPhi) * sin(rTheta), cos(rPhi));
+      
+      // 随机尺寸(比较大)和参数
+      float rnSize = 0.4 + fract(sin(rSeed * 78.9) * 23.4) * 0.4; 
+      float rnScale = 2.0 + fract(sin(rSeed * 11.1) * 34.5) * 2.5;
+      float rnBright = 0.2 + fract(sin(rSeed * 22.2) * 45.6) * 0.2;
+      
+      // 随机主色调 (HSV 思想转 RGB)
+      float hue = fract(sin(rSeed * 33.3) * 67.8);
+      vec3 baseColor = clamp(abs(fract(hue + vec3(3.0, 2.0, 1.0) / 3.0) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+      baseColor = mix(vec3(1.0), baseColor, 0.8); // 降低一点颜色饱和度防刺眼
+      
+      float rna = acos(clamp(dot(dir, rnDir), -1.0, 1.0));
+      float rnMask = smoothstep(rnSize, rnSize * 0.1, rna);
+
+      if (rnMask > 0.001) {
+        // 构建局部坐标系 (稍微加点随机倾角)
+        vec3 rnUp = normalize(vec3(fract(sin(rSeed) * 99.0), fract(cos(rSeed) * 88.0), fract(sin(rSeed*2.0) * 77.0)));
+        if (abs(dot(rnDir, rnUp)) > 0.99) rnUp = vec3(0.0, 1.0, 0.0);
+        vec3 rnR = normalize(cross(rnDir, rnUp));
+        vec3 rnU = cross(rnR, rnDir);
+        
+        float rnx = dot(dir - rnDir, rnR) * rnScale;
+        float rny = dot(dir - rnDir, rnU) * rnScale;
+        
+        // 星云常常是椭圆的
+        float stretch = 1.0 + fract(sin(rSeed * 44.4) * 55.5) * 1.5;
+        rny *= stretch;
+        
+        float rnRadius = sqrt(rnx * rnx + rny * rny);
+        float rnTheta = atan(rny, rnx);
+        
+        // 核心
+        float rnCore = exp(-rnRadius * rnRadius * 2.0);
+        
+        // 梦幻双螺旋气体臂
+        float tight = 0.6 + fract(sin(rSeed * 55.5) * 66.6) * 0.6;
+        float s1 = rnTheta - tight * log(max(rnRadius, 0.01));
+        float s2 = s1 + 3.14159;
+        float sharp = 1.5 + fract(sin(rSeed * 66.6) * 77.7) * 2.0; // 星云臂通常比星系臂柔和
+        
+        float a1 = exp(-pow(sin(s1) * rnRadius, 2.0) * sharp);
+        float a2 = exp(-pow(sin(s2) * rnRadius, 2.0) * sharp);
+        float arms = (a1 + a2) * exp(-rnRadius * 0.4);
+        
+        // 增加气体云的噪声扰动，使其看起来像星云而不是规则螺旋
+        float gasNoise = snoise(vec3(rnx * 3.0, rny * 3.0, rSeed)) * 0.5 + 0.5;
+        arms *= gasNoise;
+        
+        vec3 outColor = baseColor * (rnCore * 0.8 + arms * 1.2);
+        
+        // 边缘气体辉光
+        float halo = exp(-rnRadius * 0.3) * rnMask * 0.2;
+        vec3 haloColor = mix(baseColor, vec3(1.0), 0.3) * halo;
+        
+        starColor += outColor * rnMask * rnBright + haloColor;
+      }
+    }
+
+    // ==========================================
+    // Part 4d: 极光 (Aurora Borealis) - 头顶区域
+    // ==========================================
+    // 只在上方天空显示极光，越靠近头顶越明显
+    float auroraMask = smoothstep(0.3, 0.9, dir.y);
+    if (auroraMask > 0.001) {
+      // 展开为极坐标风格的UV，制造类似从极点发散的带状效果
+      vec2 aUv = vec2(atan(dir.z, dir.x), dir.y);
+      float aTime = time * 0.15;
+      
+      // 第一个噪声流：主要的形状扭曲 (Domain warping)
+      float warp = snoise(vec3(aUv.x * 2.0, aUv.y * 3.0, aTime)) * 0.5 + 0.5;
+      
+      // 第二个噪声流：细致的极光带
+      float aNoise1 = snoise(vec3(aUv.x * 4.0 + warp * 2.0, aUv.y * 6.0, aTime * 1.5)) * 0.5 + 0.5;
+      float aNoise2 = snoise(vec3(aUv.x * 8.0 - warp * 1.5, aUv.y * 4.0, aTime * 2.0)) * 0.5 + 0.5;
+      
+      // 组合多层噪声形成幕帘效果
+      float curtain = pow(aNoise1 * aNoise2, 1.5) * 3.0;
+      
+      // 限制成明显的条带分布，而不是充满整个天空
+      float band = sin(aUv.x * 3.0 + warp * 4.0) * 0.5 + 0.5;
+      band = pow(band, 2.0);
+      curtain *= band;
+      
+      // 高度上的渐隐 (下部暗，上部亮，然后消失)
+      float yFade = smoothstep(0.3, 0.6, dir.y) * smoothstep(1.0, 0.8, dir.y);
+      curtain *= yFade;
+      
+      // 颜色动态变化 (紫/粉 -> 绿/青)
+      vec3 colA = vec3(0.1, 0.9, 0.5); // 霓虹绿
+      vec3 colB = vec3(0.2, 0.5, 1.0); // 霓虹蓝
+      vec3 colC = vec3(0.8, 0.2, 0.9); // 霓虹紫
+      
+      // 基于角度和时间混合颜色
+      vec3 aColor = mix(colA, colB, sin(aUv.x * 2.0 + aTime) * 0.5 + 0.5);
+      aColor = mix(aColor, colC, cos(warp * 3.0 + aTime * 0.5) * 0.5 + 0.5);
+      
+      // 增加底部的高亮粉/紫过渡 (常见于极光底部)
+      float bottomFringe = smoothstep(0.5, 0.3, dir.y) * curtain;
+      aColor = mix(aColor, vec3(1.0, 0.2, 0.6), bottomFringe * 0.8);
+
+      // 整体提亮，但防止过曝
+      vec3 finalAurora = aColor * curtain * 0.6;
+      finalAurora = finalAurora / (1.0 + finalAurora * 0.5);
+      
+      starColor += finalAurora * auroraMask;
+    }
+
+    // ==========================================
+    // Part 4e: 天文摄影后期细节 (Astrophotography Details)
+    // ==========================================
+    
+    // 1. 动态脉冲星 / 类星体 (Pulsating Quasar) - 减少到2颗并随机分布
+    for(int qi = 0; qi < 2; qi++) {
+      float qSeed = float(qi) * 114.514;
+      float qTheta = fract(sin(qSeed * 1.5) * 111.1) * 6.28318;
+      float qPhi = acos(2.0 * fract(sin(qSeed * 2.5) * 222.2) - 1.0);
+      vec3 qDir = vec3(sin(qPhi) * cos(qTheta), sin(qPhi) * sin(qTheta), cos(qPhi));
+      
+      float qa = acos(clamp(dot(dir, qDir), -1.0, 1.0));
+      if (qa < 0.2) {
+        // 极速脉冲频率
+        float pulse = sin(time * (10.0 + float(qi) * 5.0)) * 0.5 + 0.5;
+        float blink = pow(sin(time * (1.5 + float(qi) * 0.7)), 8.0); // 偶尔的超亮爆闪
+        float qCore = exp(-qa * qa * 4000.0);    // 极小极亮的点
+        float qHalo = exp(-qa * 15.0) * 0.1;
+        
+        // 喷流 (Jets)
+        vec3 qR = normalize(cross(qDir, vec3(0.0, 1.0, 0.0)));
+        if (length(cross(qDir, vec3(0.0, 1.0, 0.0))) < 0.1) qR = normalize(cross(qDir, vec3(1.0, 0.0, 0.0)));
+        vec3 qU = cross(qR, qDir);
+        float qx = dot(dir - qDir, qR);
+        float qy = dot(dir - qDir, qU);
+        
+        // 旋转随机角度
+        float qAngle = fract(sin(qSeed * 3.5) * 333.3) * 6.28318;
+        float qC = cos(qAngle), qS = sin(qAngle);
+        float qrx = qx * qC - qy * qS;
+        float qry = qx * qS + qy * qC;
+
+        // 上下喷流
+        float jet = exp(-abs(qrx) * 150.0) * exp(-abs(qry) * 6.0) * 0.3;
+        
+        vec3 colBase = (qi == 0) ? vec3(0.4, 0.9, 1.0) : vec3(0.9, 0.3, 1.0); // 一蓝一紫
+        vec3 qColor = colBase * (qCore * (1.0 + pulse * 2.0 + blink * 5.0)) + 
+                      vec3(0.2, 0.5, 1.0) * qHalo * (1.0 + pulse) + 
+                      colBase * jet * (0.5 + pulse * 0.5);
+                      
+        starColor += qColor;
+      }
+    }
+
+    // 1b. M87 风格超大质量黑洞照片 (Event Horizon Telescope Image)
+    {
+      // 放置在一个随机偏上的位置
+      vec3 bhDir = normalize(vec3(-0.4, 0.6, 0.5));
+      float bhSize = 0.15; // 相对较小但很明显的圆环
+      float bha = acos(clamp(dot(dir, bhDir), -1.0, 1.0));
+      
+      if (bha < bhSize) {
+        vec3 bhR = normalize(cross(bhDir, vec3(0.0, 1.0, 0.0)));
+        vec3 bhU = cross(bhR, bhDir);
+        float bhx = dot(dir - bhDir, bhR);
+        float bhy = dot(dir - bhDir, bhU);
+        
+        float bhRadius = sqrt(bhx * bhx + bhy * bhy);
+        float bhTheta = atan(bhy, bhx);
+        
+        // 黑洞参数
+        float eventHorizonInfo = 0.015; // 视界半径 (纯黑区域)
+        float photonRing = 0.02;        // 光子环半径 (最亮区域)
+        float diskSize = 0.05;          // 吸积盘渐隐范围
+        
+        // 多普勒束流效应：一侧极亮，另一侧暗
+        float dopplerBeaming = sin(bhTheta - 0.5) * 0.5 + 0.5; // 不对称亮度
+        dopplerBeaming = mix(0.2, 1.0, dopplerBeaming);
+        
+        // 圆环形状
+        float ringProfile = exp(-pow((bhRadius - photonRing) / 0.005, 2.0));
+        
+        // 外围吸积盘
+        float accretionDisk = exp(-pow(max(0.0, bhRadius - photonRing) / 0.015, 1.5)) * 0.4;
+        
+        // 著名的橙红色调
+        vec3 bhColorCore = vec3(1.0, 0.8, 0.5); // 内部最亮处略偏黄白
+        vec3 bhColorDisk = vec3(1.0, 0.4, 0.0); // 外部标志性的火橙色
+        vec3 bhColorHalo = vec3(0.8, 0.1, 0.0); // 边缘暗红
+        
+        // 噪声纹理让环看起来有气体流动感
+        float bhNoise = snoise(vec3(bhx * 80.0, bhy * 80.0, time * 0.2)) * 0.5 + 0.5;
+        
+        // 合成亮度
+        float totalBrightness = (ringProfile * 1.5 + accretionDisk * bhNoise) * dopplerBeaming;
+        
+        // 根据亮度分配颜色
+        vec3 finalBhColor = mix(bhColorHalo, bhColorDisk, smoothstep(0.0, 0.4, totalBrightness));
+        finalBhColor = mix(finalBhColor, bhColorCore, smoothstep(0.6, 1.5, totalBrightness));
+        
+        vec3 result = finalBhColor * totalBrightness;
+        
+        // 绝对黑洞中心 (吞噬一切光线)
+        float shadowCore = smoothstep(eventHorizonInfo - 0.002, eventHorizonInfo + 0.002, bhRadius);
+        
+        // 遮罩叠加，黑洞区域会切断背景星光（真实剪影）
+        // 这里只是加亮，但在中心强制用 shadowCore 降低所有亮度
+        starColor = starColor * shadowCore + result * shadowCore;
+      }
+    }
+
+    // 2. JWST 风格衍射十字星芒 (6-point Diffraction Spikes)
+    // 我们只给天空中少数几颗“极亮星”添加这种光学衍射效果
+    for(int spi = 0; spi < 6; spi++) {
+      float spSeed = float(spi) * 88.88;
+      float spTheta = fract(sin(spSeed * 1.1) * 111.1) * 6.28318;
+      float spPhi = acos(2.0 * fract(sin(spSeed * 2.2) * 222.2) - 1.0);
+      vec3 spDir = vec3(sin(spPhi) * cos(spTheta), sin(spPhi) * sin(spTheta), cos(spPhi));
+      
+      float spa = acos(clamp(dot(dir, spDir), -1.0, 1.0));
+      if (spa < 0.15) {
+        vec3 spR = normalize(cross(spDir, vec3(0.0, 1.0, 0.0)));
+        if (length(cross(spDir, vec3(0.0, 1.0, 0.0))) < 0.1) spR = normalize(cross(spDir, vec3(1.0, 0.0, 0.0)));
+        vec3 spU = cross(spR, spDir);
+        float spx = dot(dir - spDir, spR);
+        float spy = dot(dir - spDir, spU);
+        
+        // 旋转 6 角星芒 (James Webb style)
+        float angle = 0.5; // 倾斜角
+        float c = cos(angle), s = sin(angle);
+        float rx = spx * c - spy * s;
+        float ry = spx * s + spy * c;
+        
+        // 3条交叉线形成6角
+        float line1 = exp(-abs(rx) * 600.0) * exp(-abs(ry) * 15.0);
+        
+        float r60x = rx * 0.5 - ry * 0.866; // cos(60), sin(60)
+        float r60y = rx * 0.866 + ry * 0.5;
+        float line2 = exp(-abs(r60x) * 600.0) * exp(-abs(r60y) * 15.0);
+        
+        float r120x = rx * -0.5 - ry * 0.866;
+        float r120y = rx * 0.866 + ry * -0.5;
+        float line3 = exp(-abs(r120x) * 600.0) * exp(-abs(r120y) * 15.0);
+        
+        float spikeIntensity = line1 + line2 + line3;
+        float twinkle = sin(time * 3.0 + spSeed) * 0.3 + 0.7; // 闪烁
+        
+        vec3 spColor = vec3(1.0, 0.9, 0.8) * spikeIntensity * 0.6 * twinkle;
+        // 核心亮点
+        spColor += vec3(1.0) * exp(-spa * spa * 10000.0) * twinkle;
+        
+        starColor += spColor;
+      }
+    }
+
+    // 3. 深空场背景星系 (Deep Field faint galaxies)
+    // 在极远处添加一些红色/橙色的微小光斑，模拟宇宙早期的遥远星系
+    float dfNoise = snoise(dir * 80.0);
+    float dfNoise2 = snoise(dir * 120.0 + 50.0);
+    if (dfNoise > 0.85 && dfNoise2 > 0.6) {
+      float dfIntensity = (dfNoise - 0.85) * 6.0; // 0 to ~1
+      float dfShape = snoise(dir * 200.0);        // 让它们是不规则的
+      vec3 dfColor = mix(vec3(1.0, 0.3, 0.1), vec3(0.8, 0.5, 0.2), dfShape * 0.5 + 0.5);
+      starColor += dfColor * dfIntensity * 0.15;
+    }
+
+    // ==========================================
     // Part 5: 流星动画 (纯 Shader 实现)
     // ==========================================
     vec3 meteorTotal = vec3(0.0);
@@ -440,10 +803,13 @@ const FollowingSkybox = () => {
   return (
     <group ref={groupRef}>
       <NebulaSphere />
-      <Stars radius={200} depth={80} count={5000} factor={4} saturation={0} fade speed={0.5} />
-      <Sparkles count={250} scale={[250, 250, 250]} size={8} speed={0} noise={0} color="#00f3ff" opacity={0.4} />
-      <Sparkles count={120} scale={[280, 280, 280]} size={14} speed={0} noise={0} color="#bf00ff" opacity={0.5} />
-      <Sparkles count={50} scale={[220, 220, 220]} size={22} speed={0} noise={0} color="#ffffff" opacity={0.4} />
+      <Stars radius={200} depth={80} count={6000} factor={6} saturation={0.5} fade speed={1.2} />
+      <Sparkles count={300} scale={[250, 250, 250]} size={10} speed={0.4} noise={0.2} color="#00f3ff" opacity={0.5} />
+      <Sparkles count={150} scale={[180, 180, 180]} size={16} speed={0.6} noise={0.3} color="#bf00ff" opacity={0.6} />
+      {/* 极大的魔法星尘粒子 */}
+      <Sparkles count={40} scale={[200, 200, 200]} size={45} speed={0.3} noise={0.1} color="#ffaa00" opacity={0.4} />
+      <Sparkles count={30} scale={[220, 220, 220]} size={50} speed={0.2} noise={0.1} color="#ff00ff" opacity={0.3} />
+
     </group>
   );
 };
@@ -455,18 +821,18 @@ export const Scene = () => {
       <ambientLight intensity={0.2} />
       <FollowingSkybox />
 
-      <Physics gravity={[0, 0, 0]}>
+      <Physics gravity={[0, 0, 0]} interpolate>
         <Player />
         <Enemies />
         <CrystalShards />
+        <HostileNPCs />
       </Physics>
 
       <LaserBeam />
 
-      <EffectComposer>
-        <Bloom luminanceThreshold={0.2} luminanceSmoothing={0.9} height={300} intensity={1.5} />
-        <Noise opacity={0.05} />
-        <Vignette eskil={false} offset={0.1} darkness={1.1} />
+      <EffectComposer disableNormalPass>
+        <Bloom luminanceThreshold={0.25} luminanceSmoothing={0.7} intensity={2.2} />
+        <Vignette eskil={false} offset={0.1} darkness={0.8} />
       </EffectComposer>
     </>
   );
